@@ -1,6 +1,7 @@
 'use strict';
 const path = require('node:path');
-const { appByName, deployBranches } = require('../../lib/config.js');
+const { appByName } = require('../../lib/config.js');
+const { isValidBranch } = require('../../mcp-gaps/lib/validate.js');
 
 /**
  * Validated project config (see lib/config.js): apps[{name, healthUrl, deployBranch}],
@@ -62,19 +63,22 @@ const GAPS_KEYS = Object.freeze({
   backup_info: ['app', 'id'],
   backup_capture: ['app'],
   health_check: ['app'],
-  git_fetch: [],
-  git_log: ['rev', 'range', 'format', 'n', 'paths'],
-  git_show: ['rev', 'path', 'format'],
-  git_ls_tree: ['rev', 'recursive', 'nameOnly', 'paths'],
-  git_diff: ['from', 'to', 'format', 'paths'],
+  git_fetch: ['app'],
+  git_log: ['app', 'rev', 'range', 'format', 'n', 'paths'],
+  git_show: ['app', 'rev', 'path', 'format'],
+  git_ls_tree: ['app', 'rev', 'recursive', 'nameOnly', 'paths'],
+  git_diff: ['app', 'from', 'to', 'format', 'paths'],
 });
 
 // Gaps tools that act on a Heroku app and therefore require a configured `app`.
-const GAPS_APP_TOOLS = new Set(['releases_list', 'backup_info', 'backup_capture', 'health_check']);
+const GAPS_APP_TOOLS = new Set([
+  'releases_list', 'backup_info', 'backup_capture', 'health_check',
+  'git_fetch', 'git_log', 'git_show', 'git_ls_tree', 'git_diff',
+]);
 
 const PROCEDURES = ['deploy', 'incident', 'routine'];
 
-// Git ref parameters that may name a remote branch: every `origin/<x>` inside them must be a deployBranch.
+// Git ref parameters that may name a remote branch: every `origin/<x>` inside them must be a valid branch name.
 const GAPS_REF_TOOLS = new Set(['git_log', 'git_show', 'git_ls_tree', 'git_diff']);
 const GAPS_REF_KEYS = ['rev', 'range', 'from', 'to'];
 // origin/<branch>, up to a revision suffix (~ ^ : @ {), a range operator (..) or whitespace.
@@ -89,17 +93,13 @@ function checkApp(app, config) {
   return { ok: false, reason: `The app is not configured (configured: ${appNames(config).join(', ')}).` };
 }
 
-function checkOriginRefs(tool, inp, config) {
-  const allowed = deployBranches(config);
+function checkOriginRefs(tool, inp) {
   for (const key of GAPS_REF_KEYS) {
     const v = inp[key];
     if (typeof v !== 'string') continue;
     for (const m of v.matchAll(ORIGIN_REF_RE)) {
-      if (!allowed.includes(m[1])) {
-        return {
-          ok: false,
-          reason: `${tool}: "${key}" references origin/${m[1]}, which is not a configured deployBranch (allowed: ${allowed.join(', ')}).`,
-        };
+      if (!isValidBranch(m[1])) {
+        return { ok: false, reason: `${tool}: "${key}" references origin/${m[1]}, which is not a valid remote branch name.` };
       }
     }
   }
@@ -140,7 +140,7 @@ function checkGapsInput(tool, inp, config) {
   if (tool === 'get_procedure' && !PROCEDURES.includes(inp.name)) {
     return { ok: false, reason: `get_procedure: "name" must be one of ${PROCEDURES.join(', ')}.` };
   }
-  if (GAPS_REF_TOOLS.has(tool)) return checkOriginRefs(tool, inp, config);
+  if (GAPS_REF_TOOLS.has(tool)) return checkOriginRefs(tool, inp);
   return { ok: true };
 }
 
@@ -197,6 +197,36 @@ function isPathAllowed(p, roots, opts = {}) {
     const rel = api.relative(norm(api.resolve(r)), target);
     return rel !== '..' && !rel.startsWith('..' + api.sep) && !api.isAbsolute(rel);
   });
+}
+
+/**
+ * The longest root that contains p (same resolution as isPathAllowed), or null.
+ * @param {string|undefined} p
+ * @param {string[]} roots
+ * @param {{flavor?: 'win32'|'posix', base?: string}} [opts]
+ * @returns {string|null}
+ */
+function containingRoot(p, roots, opts = {}) {
+  if (typeof p !== 'string' || p === '' || !Array.isArray(roots)) return null;
+  const flavor = opts.flavor || defaultFlavor();
+  const api = pathApi(flavor);
+  const norm = (x) => (flavor === 'win32' ? x.toLowerCase() : x);
+  const base = typeof opts.base === 'string' && opts.base !== '' ? opts.base : roots[0];
+  if (typeof base !== 'string' || base === '') return null;
+  const target = norm(api.resolve(base, p));
+  let best = null;
+  let bestLen = -1;
+  for (const r of roots) {
+    if (typeof r !== 'string' || r === '') continue;
+    const resolved = norm(api.resolve(r));
+    const rel = api.relative(resolved, target);
+    if (rel === '..' || rel.startsWith('..' + api.sep) || api.isAbsolute(rel)) continue;
+    if (resolved.length > bestLen) {
+      best = r;
+      bestLen = resolved.length;
+    }
+  }
+  return best;
 }
 
 // Credential file names, compared lowercase on every platform.
@@ -280,5 +310,5 @@ function isSimpleGrepGlob(glob) {
 module.exports = {
   isSimpleGrepGlob,
   PLUGIN_AGENT, MCP_PREFIX, MCP_N0, MCP_N1, GAPS_PREFIX, GAPS_N0, GAPS_N1, GAPS_KEYS,
-  classifyMcpTool, checkMcpInput, isPathAllowed, isCredentialPath, patternTargetsCredentials,
+  classifyMcpTool, checkMcpInput, isPathAllowed, containingRoot, isCredentialPath, patternTargetsCredentials,
 };

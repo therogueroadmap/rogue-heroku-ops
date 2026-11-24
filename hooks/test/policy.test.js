@@ -86,6 +86,8 @@ test('classifyMcpTool: heroku-ops-gaps server', () => {
   assert.deepEqual(policy.GAPS_KEYS.get_config, []);
   assert.deepEqual(policy.GAPS_KEYS.get_procedure, ['name']);
   assert.deepEqual(policy.GAPS_KEYS.health_check, ['app']);
+  assert.deepEqual(policy.GAPS_KEYS.git_fetch, ['app']);
+  for (const t of ['git_log', 'git_show', 'git_ls_tree', 'git_diff']) assert.ok(policy.GAPS_KEYS[t].includes('app'), t);
 });
 
 test('checkMcpInput: heroku-ops-gaps server', () => {
@@ -93,9 +95,12 @@ test('checkMcpInput: heroku-ops-gaps server', () => {
   assert.equal(k('releases_list', { app: APP, limit: 5 }, cfg, 'gaps').ok, true);
   assert.equal(k('releases_list', { app: 'otra' }, cfg, 'gaps').ok, false);
   assert.equal(k('releases_list', {}, cfg, 'gaps').ok, false);
-  assert.equal(k('git_log', { rev: 'HEAD', app: APP }, cfg, 'gaps').ok, false);
-  assert.equal(k('git_log', { rev: 'HEAD', extra: 1 }, cfg, 'gaps').ok, false);
-  assert.equal(k('git_log', { rev: 'HEAD' }, cfg, 'gaps').ok, true);
+  assert.equal(k('git_log', { app: APP, rev: 'HEAD', extra: 1 }, cfg, 'gaps').ok, false);
+  assert.equal(k('git_log', { rev: 'HEAD' }, cfg, 'gaps').ok, false); // git needs a configured app
+  assert.equal(k('git_log', { app: 'nope', rev: 'HEAD' }, cfg, 'gaps').ok, false);
+  assert.equal(k('git_log', { app: APP, rev: 'HEAD' }, cfg, 'gaps').ok, true);
+  assert.equal(k('git_fetch', {}, cfg, 'gaps').ok, false);
+  assert.equal(k('git_fetch', { app: APP }, cfg, 'gaps').ok, true);
   assert.equal(k('health_check', { app: APP }, cfg, 'gaps').ok, true);
   assert.equal(k('health_check', {}, cfg, 'gaps').ok, false);
   assert.equal(k('get_config', {}, cfg, 'gaps').ok, true);
@@ -106,16 +111,40 @@ test('checkMcpInput: heroku-ops-gaps server', () => {
   assert.equal(k('backup_info', { app: APP, id: 'b001' }, cfg, 'gaps').ok, true);
 });
 
-test('checkMcpInput: origin/<x> in rev, range, from and to must be a deployBranch', () => {
-  const k = (tool, input) => policy.checkMcpInput(tool, input, cfg, 'gaps').ok;
+test('checkMcpInput: origin/<x> in rev, range, from and to must be a valid branch name', () => {
+  const k = (tool, input) => policy.checkMcpInput(tool, { app: APP, ...input }, cfg, 'gaps').ok;
   assert.equal(k('git_log', { rev: 'origin/main' }), true);
+  assert.equal(k('git_log', { rev: 'origin/feature/x' }), true);
   assert.equal(k('git_log', { range: 'origin/main..origin/develop' }), true);
-  assert.equal(k('git_log', { rev: 'origin/other' }), false);
-  assert.equal(k('git_log', { range: 'origin/main..origin/other' }), false);
-  assert.equal(k('git_show', { rev: 'origin/other:f.txt' }), false);
-  assert.equal(k('git_ls_tree', { rev: 'origin/other' }), false);
-  assert.equal(k('git_diff', { from: 'origin/main', to: 'origin/other' }), false);
+  assert.equal(k('git_log', { range: 'origin/release/1.4..HEAD' }), true);
+  assert.equal(k('git_log', { rev: 'origin/HEAD' }), false);
+  assert.equal(k('git_log', { rev: 'origin/-x' }), false);
+  assert.equal(k('git_log', { range: 'origin/main..origin/-x' }), false);
+  assert.equal(k('git_show', { rev: 'origin/-x:f.txt' }), false);
+  assert.equal(k('git_ls_tree', { rev: 'origin/-x' }), false);
+  assert.equal(k('git_diff', { from: 'origin/main', to: 'origin/-x' }), false);
   assert.equal(k('git_log', { rev: 5 }), true); // non-strings are the server's concern
+});
+
+test('containingRoot picks the most specific root', () => {
+  const roots = ['/p', '/p/sub/repo'];
+  assert.equal(policy.containingRoot('/p/sub/repo/a.sql', roots, { flavor: 'posix' }), '/p/sub/repo');
+  assert.equal(policy.containingRoot('/p/other/a.sql', roots, { flavor: 'posix' }), '/p');
+  assert.equal(policy.containingRoot('src/a.sql', roots, { flavor: 'posix' }), '/p'); // relative: base defaults to roots[0]
+});
+
+test('containingRoot null outside roots', () => {
+  assert.equal(policy.containingRoot('/elsewhere/a.sql', ['/p', '/p/sub/repo'], { flavor: 'posix' }), null);
+  assert.equal(policy.containingRoot('/p/../x', ['/p'], { flavor: 'posix' }), null);
+  assert.equal(policy.containingRoot(undefined, ['/p'], { flavor: 'posix' }), null);
+  assert.equal(policy.containingRoot('/p/a', 'nope', { flavor: 'posix' }), null);
+});
+
+test('containingRoot win32 is case-insensitive and picks the longest root with mixed separators', () => {
+  const roots = ['C:\\Users\\dev\\project', 'c:/users/dev/project/Sub/Repo'];
+  assert.equal(policy.containingRoot('C:\\USERS\\dev\\PROJECT\\sub\\repo\\A.sql', roots, { flavor: 'win32' }), 'c:/users/dev/project/Sub/Repo');
+  assert.equal(policy.containingRoot('c:/users/dev/project/x.sql', roots, { flavor: 'win32' }), 'C:\\Users\\dev\\project');
+  assert.equal(policy.containingRoot('D:\\users\\dev\\project\\x.sql', roots, { flavor: 'win32' }), null);
 });
 
 test('isPathAllowed: win32 semantics', () => {

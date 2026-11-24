@@ -104,7 +104,7 @@ test('agent Read of .env inside the project -> deny', () => {
 });
 
 test('valid config: allowed MCP tool -> allow, and a decision line is audited', () => {
-  const r = run(call(G('git_log'), { rev: 'HEAD' }));
+  const r = run(call(G('git_log'), { app: APP, rev: 'HEAD' }));
   assert.equal(r.status, 0);
   assert.equal(out(r).permissionDecision, 'allow');
   const files = fs.readdirSync(r.auditDir);
@@ -119,7 +119,7 @@ test('valid config: allowed MCP tool -> allow, and a decision line is audited', 
 });
 
 test('without CLAUDE_PLUGIN_DATA the guard still decides and writes no file', () => {
-  const r = run(call(G('git_log'), { rev: 'HEAD' }), { data: false });
+  const r = run(call(G('git_log'), { app: APP, rev: 'HEAD' }), { data: false });
   assert.equal(r.status, 0);
   assert.equal(out(r).permissionDecision, 'allow');
   assert.equal(fs.readdirSync(r.dataDir).length, 0);
@@ -138,10 +138,10 @@ test('updatedInput is returned for pg_psql', () => {
   assert.equal(o.updatedInput.command, 'BEGIN TRANSACTION READ ONLY; SELECT 1; ROLLBACK;');
 });
 
-test('git ref to a branch that is not a deployBranch -> deny in the guard', () => {
-  const r = run(call(G('git_log'), { range: 'origin/main..origin/secret' }));
+test('git ref to an invalid remote branch name -> deny in the guard', () => {
+  const r = run(call(G('git_log'), { app: APP, range: 'origin/main..origin/-x' }));
   assert.equal(out(r).permissionDecision, 'deny');
-  assert.match(out(r).permissionDecisionReason, /deployBranch/);
+  assert.match(out(r).permissionDecisionReason, /valid remote branch name/);
 });
 
 test('decision line of a denied MCP pg_psql keeps agent_type and a redacted input', () => {

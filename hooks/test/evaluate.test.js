@@ -24,6 +24,18 @@ const mkCfg = (over = {}) => ({
     ...over,
   },
 });
+const repo = path.join(os.tmpdir(), 'rho-eval-repo');
+fs.mkdirSync(path.join(repo, '.git'), { recursive: true });
+fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
+fs.writeFileSync(path.join(repo, 'src', 'V1__a.sql'), 'SELECT 1;');
+fs.writeFileSync(path.join(repo, '.env'), 'SECRET=1');
+const withRepo = () =>
+  mkCfg({
+    apps: [
+      { name: APP, healthUrl: 'https://my-app.herokuapp.com/health', deployBranch: 'main', repoPath: repo },
+      { name: 'my-app-staging', healthUrl: 'https://my-app-staging.herokuapp.com/health', deployBranch: 'develop' },
+    ],
+  });
 const okCfg = mkCfg();
 const T = (t) => 'mcp__plugin_rogue-heroku-ops_heroku-ops__' + t;
 const G = (t) => 'mcp__plugin_rogue-heroku-ops_heroku-ops-gaps__' + t;
@@ -306,7 +318,7 @@ test('MCP get_addon_info: addon must be an attachment name', () => {
 });
 
 test('gaps N0 tool -> allow N0', () => {
-  const d = ev(G('git_log'), { rev: 'HEAD' });
+  const d = ev(G('git_log'), { app: APP, rev: 'HEAD' });
   assert.equal(d.decision, 'allow');
   assert.equal(d.level, 'N0');
   assert.equal(ev(G('releases_list'), { app: APP, limit: 5 }).decision, 'allow');
@@ -338,55 +350,84 @@ test('gaps backup_capture follows n1Mode', () => {
 
 test('gaps unknown tool, extra keys, lookalike prefix -> deny', () => {
   assert.equal(ev(G('git_push'), {}).decision, 'deny');
-  assert.equal(ev(G('git_log'), { rev: 'HEAD', extra: 1 }).decision, 'deny');
-  assert.equal(ev(G('git_log'), { rev: 'HEAD', app: APP }).decision, 'deny');
+  assert.equal(ev(G('git_log'), { app: APP, rev: 'HEAD', extra: 1 }).decision, 'deny');
   assert.equal(ev('mcp__plugin_rogue-heroku-ops_heroku-ops-gapsx__git_log', { rev: 'HEAD' }).decision, 'deny');
   assert.equal(ev('mcp__heroku-ops__ps_list', { app: APP }).decision, 'deny'); // old personal prefix
 });
 
-// Ruling 1: origin/<branch> in rev and range must be a configured deployBranch.
-test('git refs: origin/<deployBranch> of any app allowed, other branches denied', () => {
+test('git tools require a configured app', () => {
+  assert.equal(ev(G('git_log'), { rev: 'origin/main' }).decision, 'deny');
+  assert.equal(ev(G('git_log'), { app: 'nope', rev: 'origin/main' }).decision, 'deny');
+  assert.equal(ev(G('git_log'), { app: APP, rev: 'origin/main' }).decision, 'allow');
+  assert.equal(ev(G('git_fetch'), {}).decision, 'deny');
+  assert.equal(ev(G('git_fetch'), { app: APP }).decision, 'allow');
+  for (const tool of ['git_show', 'git_ls_tree', 'git_diff']) assert.equal(ev(G(tool), { rev: 'HEAD' }).decision, 'deny', tool);
+});
+
+test('any valid remote branch allowed in refs', () => {
   for (const [tool, input] of [
-    ['git_log', { rev: 'origin/main' }],
-    ['git_log', { rev: 'origin/develop' }],
-    ['git_log', { range: 'origin/main..origin/develop' }],
-    ['git_log', { range: 'HEAD..origin/main' }],
-    ['git_log', { range: 'origin/main...HEAD', n: 5 }],
-    ['git_show', { rev: 'origin/main:db/migration/V1__x.sql' }],
-    ['git_show', { rev: 'origin/main~2' }],
-    ['git_ls_tree', { rev: 'origin/develop', recursive: true }],
-    ['git_diff', { from: 'origin/main', to: 'HEAD' }],
-    ['git_log', { rev: 'HEAD' }],
-    ['git_log', { rev: 'a1b2c3d' }],
+    ['git_log', { app: APP, rev: 'origin/feature/x' }],
+    ['git_log', { app: APP, range: 'origin/release/1.4..HEAD' }],
+    ['git_log', { app: APP, range: 'origin/main..origin/develop' }],
+    ['git_show', { app: APP, rev: 'origin/main:db/migration/V1__x.sql' }],
+    ['git_show', { app: APP, rev: 'origin/hotfix~2' }],
+    ['git_ls_tree', { app: APP, rev: 'origin/develop', recursive: true }],
+    ['git_diff', { app: APP, from: 'origin/main', to: 'origin/feature/y' }],
+    ['git_log', { app: APP, rev: 'HEAD' }],
+    ['git_log', { app: APP, rev: 'a1b2c3d' }],
   ]) {
     assert.equal(ev(G(tool), input).decision, 'allow', JSON.stringify(input));
   }
   for (const [tool, input] of [
-    ['git_log', { rev: 'origin/feature-x' }],
-    ['git_log', { rev: 'origin/mainx' }],
-    ['git_log', { range: 'origin/main..origin/hotfix' }],
-    ['git_log', { range: 'origin/hotfix..origin/main' }],
-    ['git_log', { range: 'HEAD..origin/secret' }],
-    ['git_log', { rev: '^origin/other' }],
-    ['git_log', { rev: 'refs/remotes/origin/other' }],
-    ['git_show', { rev: 'origin/other:path/file.txt' }],
-    ['git_show', { rev: 'origin/other~1' }],
-    ['git_ls_tree', { rev: 'origin/other' }],
-    ['git_diff', { from: 'origin/main', to: 'origin/other' }],
-    ['git_diff', { from: 'origin/other', to: 'HEAD' }],
+    ['git_log', { app: APP, rev: 'origin/HEAD' }],
+    ['git_log', { app: APP, rev: 'origin/-x' }],
+    ['git_log', { app: APP, range: 'HEAD..origin/-x' }],
+    ['git_show', { app: APP, rev: 'origin/-x:path/file.txt' }],
+    ['git_diff', { app: APP, from: 'origin/main', to: 'origin/HEAD' }],
   ]) {
     const d = ev(G(tool), input);
     assert.equal(d.decision, 'deny', JSON.stringify(input));
-    assert.match(d.reason, /deployBranch/);
+    assert.match(d.reason, /valid remote branch name/);
   }
 });
 
-test('git refs: a branch with slashes must match a deployBranch exactly', () => {
-  const cfg = mkCfg({ apps: [{ name: APP, healthUrl: 'https://x.invalid/h', deployBranch: 'release/1.0' }] });
-  assert.equal(ev(G('git_log'), { rev: 'origin/release/1.0' }, cfg).decision, 'allow');
-  assert.equal(ev(G('git_log'), { range: 'origin/release/1.0..HEAD' }, cfg).decision, 'allow');
-  assert.equal(ev(G('git_log'), { rev: 'origin/release' }, cfg).decision, 'deny');
-  assert.equal(ev(G('git_log'), { rev: 'origin/release/2.0' }, cfg).decision, 'deny');
+// Rule 3 with configured repositories
+const repoCfg = withRepo();
+const rv = (tool, input, cfg = repoCfg) => ev(tool, input, cfg);
+
+test('Read absolute path inside repoPath -> allow', () => {
+  assert.equal(rv('Read', { file_path: path.join(repo, 'src', 'V1__a.sql') }).decision, 'allow');
+});
+
+test('Read inside repoPath with other case and forward slashes -> allow (win32)', { skip: process.platform !== 'win32' }, () => {
+  const odd = path.join(repo, 'src', 'V1__a.sql').toUpperCase().replace(/\\/g, '/');
+  assert.equal(rv('Read', { file_path: odd }).decision, 'allow');
+});
+
+test('Read outside project and repoPath -> deny', () => {
+  assert.equal(rv('Read', { file_path: path.join(os.tmpdir(), 'rho-elsewhere', 'x.sql') }).decision, 'deny');
+  assert.equal(rv('Read', { file_path: path.join(repo + '-x', 'a.sql') }).decision, 'deny');
+});
+
+test('Read relative path resolves against project', () => {
+  assert.equal(rv('Read', { file_path: '../rho-eval-repo/src/V1__a.sql' }).decision, 'allow');
+  assert.equal(rv('Read', { file_path: '../otro/x.sql' }).decision, 'deny');
+});
+
+test('credentials inside repoPath -> deny', () => {
+  assert.equal(rv('Read', { file_path: path.join(repo, '.env') }).decision, 'deny');
+  assert.equal(rv('Grep', { pattern: 'x', path: repo, glob: '**/.env*' }).decision, 'deny');
+  assert.equal(rv('Glob', { path: repo, pattern: '**/*.pem' }).decision, 'deny');
+});
+
+test('Grep inside repoPath with a simple glob -> allow', () => {
+  assert.equal(rv('Grep', { pattern: 'SELECT', path: repo, glob: '**/*.sql' }).decision, 'allow');
+});
+
+test('invalid config -> only project root', () => {
+  const bad = { ok: false, problems: ['x'], file: null };
+  assert.equal(ev('Read', { file_path: path.join(repo, 'src', 'V1__a.sql') }, bad).decision, 'deny');
+  assert.equal(ev('Read', { file_path: path.join(proj, 'pom.xml') }, bad).decision, 'allow');
 });
 
 test('other tools -> deny', () => {
