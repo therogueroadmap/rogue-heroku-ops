@@ -2,7 +2,7 @@
 
 A Claude Code plugin that gives you a Heroku operator agent behind a safety guard: deploy GO/NO-GO checks, incident triage and routine reviews of your apps. It never deploys, rolls back or restores.
 
-**Version:** 0.1.0 | **Status:** In progress | **Live-tested:** Windows (see [Tested platforms](#tested-platforms))
+**Version:** 0.1.1 | **Status:** In progress | **Live-tested:** Windows (see [Tested platforms](#tested-platforms))
 
 ## What it does
 
@@ -86,7 +86,7 @@ What the guard enforces:
 - Tool allowlist, and `app` must be one of the apps in the config.
 - SQL must be a single read-only statement and is always rewritten to run in a `READ ONLY` transaction. `pg_psql` accepts no `file` or `credential` arguments.
 - The agent reads only inside the project directory. `Grep` on a directory needs a simple glob such as `**/*.sql`. It never reads credential files (`.env*`, `*.pem`, `*.key` and similar).
-- The git tools (`git_show` with `path`, `git_diff` and `git_log` with `paths`) reject credential paths with the same rule. `git_show` without `path` (the full diff of a commit) can still show changes to those files.
+- The git tools (`git_show` with `path`, `git_diff` and `git_log` with `paths`) reject credential paths with the same rule. `git_show` without `path` (the full diff of a commit) and `git_diff` with a directory in `paths` can still show changes to those files.
 - The hook fails closed: if it errors, crashes or cannot parse its input, the call is denied. It runs `node` directly, with no shell, and sets `onFailure: "block"`, so the call is also blocked if the hook cannot start, exits with an unexpected code or reaches its 30-second timeout, on every platform (including Windows without Git Bash).
 
 Limits:
