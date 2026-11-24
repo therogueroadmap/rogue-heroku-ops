@@ -88,7 +88,7 @@ function evaluatePathTool(toolName, input, projectDir) {
   }
   const pattern = toolName === 'Glob' ? input.pattern : toolName === 'Grep' ? input.glob : undefined;
   if (escapesPath(pattern)) return deny(`${toolName}: the pattern leaves the project directory.`);
-  // Only the part below the project counts: a project prefix such as C:\Users\RUNNER~1 is not a credential.
+  // Only the part below the project counts: an 8.3 segment in the project prefix (such as RUNNER~1) is not a credential.
   const rel = path.relative(path.resolve(projectDir), path.resolve(projectDir, p));
   if (isCredentialPath(rel) || patternTargetsCredentials(pattern)) {
     return deny(`${toolName}: reading .env files and credential files is not allowed.`);
