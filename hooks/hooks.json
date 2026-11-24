@@ -1,0 +1,35 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/install-deps.js\"" }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "^(mcp__plugin_rogue-heroku-ops_heroku-ops__.*|mcp__plugin_rogue-heroku-ops_heroku-ops-gaps__.*|Read|Grep|Glob)$",
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/guard.js\" || exit 2" }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "^(mcp__plugin_rogue-heroku-ops_heroku-ops__.*|mcp__plugin_rogue-heroku-ops_heroku-ops-gaps__.*|Read|Grep|Glob)$",
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/audit.js\"" }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "^(mcp__plugin_rogue-heroku-ops_heroku-ops__.*|mcp__plugin_rogue-heroku-ops_heroku-ops-gaps__.*|Read|Grep|Glob)$",
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/audit.js\"" }
+        ]
+      }
+    ]
+  }
+}

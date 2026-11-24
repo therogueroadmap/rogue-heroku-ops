@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "heroku-ops": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/bin/launch-official.js"]
+    },
+    "heroku-ops-gaps": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/mcp-gaps/server.js"],
+      "env": {
+        "CLAUDE_PROJECT_DIR": "${CLAUDE_PROJECT_DIR}",
+        "CLAUDE_PLUGIN_ROOT": "${CLAUDE_PLUGIN_ROOT}",
+        "NODE_PATH": "${CLAUDE_PLUGIN_DATA}/node_modules"
+      }
+    }
+  }
+}

@@ -1,0 +1,140 @@
+'use strict';
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { spawnSync } = require('node:child_process');
+const policy = require('../lib/policy.js');
+const { toolDefinitions } = require('../../mcp-gaps/lib/schemas.js');
+
+const ROOT = path.join(__dirname, '..', '..');
+const readJson = (rel) => JSON.parse(fs.readFileSync(path.join(ROOT, rel), 'utf8'));
+
+function parseAgent() {
+  const text = fs.readFileSync(path.join(ROOT, 'agents', 'heroku-ops.md'), 'utf8');
+  const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/.exec(text);
+  assert.ok(m, 'agent has frontmatter');
+  const keys = [...m[1].matchAll(/^([A-Za-z]+):/gm)].map((x) => x[1]);
+  const tools = [...m[1].matchAll(/^ {2}- (\S+)$/gm)].map((x) => x[1]);
+  return { front: m[1], keys, tools, body: m[2], text };
+}
+
+test('agent tools = Read, Grep, Glob + every N0/N1 tool with plugin prefixes, no wildcards, no Bash/PowerShell', () => {
+  const { tools } = parseAgent();
+  const expected = [
+    'Read', 'Grep', 'Glob',
+    ...[...policy.MCP_N0, ...policy.MCP_N1].map((t) => policy.MCP_PREFIX + t),
+    ...[...policy.GAPS_N0, ...policy.GAPS_N1].map((t) => policy.GAPS_PREFIX + t),
+  ];
+  assert.deepEqual([...tools].sort(), [...expected].sort());
+  assert.equal(new Set(tools).size, tools.length);
+  for (const t of tools) {
+    assert.doesNotMatch(t, /\*/);
+    assert.ok(!['Bash', 'PowerShell'].includes(t));
+  }
+});
+
+test('agent frontmatter has no hooks, mcpServers, permissionMode', () => {
+  const { keys, front } = parseAgent();
+  for (const k of ['hooks', 'mcpServers', 'permissionMode']) assert.ok(!keys.includes(k), k);
+  assert.match(front, /^name: heroku-ops$/m);
+  assert.match(front, /^model: sonnet$/m);
+});
+
+test('agent prompt is generic: calls get_config and get_procedure, no fixed paths or app names', () => {
+  const { text, body } = parseAgent();
+  assert.match(body, /get_config/);
+  assert.match(body, /get_procedure/);
+  const banned = ['api' + 'transfer', 'mb' + 'sg', 'jr' + 'per', 'Money ' + 'Transfer', 'Claude ' + 'Projects'];
+  for (const b of banned) assert.ok(!text.toLowerCase().includes(b.toLowerCase()), b);
+  assert.doesNotMatch(text, /[A-Za-z]:\\/);
+});
+
+test('every gaps tool in schemas.js is classified in GAPS_N0 or GAPS_N1 and vice versa', () => {
+  const names = Object.keys(toolDefinitions(null)).sort();
+  const classified = [...policy.GAPS_N0, ...policy.GAPS_N1].sort();
+  assert.deepEqual(names, classified);
+});
+
+test('hooks.json PreToolUse matcher matches both prefixes and Read|Grep|Glob, not Bash', () => {
+  const h = readJson('hooks/hooks.json').hooks;
+  const re = new RegExp(h.PreToolUse[0].matcher);
+  assert.ok(re.test(policy.MCP_PREFIX + 'ps_list'));
+  assert.ok(re.test(policy.GAPS_PREFIX + 'get_config'));
+  for (const t of ['Read', 'Grep', 'Glob']) assert.ok(re.test(t), t);
+  for (const t of ['Bash', 'PowerShell', 'Write', 'ReadFile', 'mcp__other__ps_list']) assert.ok(!re.test(t), t);
+  assert.equal(h.PostToolUse[0].matcher, h.PreToolUse[0].matcher);
+  assert.equal(h.PostToolUseFailure[0].matcher, h.PreToolUse[0].matcher);
+});
+
+test('hooks.json PreToolUse command quotes ${CLAUDE_PLUGIN_ROOT} and fails closed', () => {
+  const h = readJson('hooks/hooks.json').hooks;
+  assert.equal(h.PreToolUse[0].hooks[0].command, 'node "${CLAUDE_PLUGIN_ROOT}/hooks/guard.js" || exit 2');
+  assert.equal(h.PostToolUse[0].hooks[0].command, 'node "${CLAUDE_PLUGIN_ROOT}/hooks/audit.js"');
+  assert.equal(h.PostToolUseFailure[0].hooks[0].command, 'node "${CLAUDE_PLUGIN_ROOT}/hooks/audit.js"');
+});
+
+test('hooks.json SessionStart installs dependencies into CLAUDE_PLUGIN_DATA', () => {
+  const h = readJson('hooks/hooks.json').hooks;
+  assert.equal(h.SessionStart[0].hooks[0].command, 'node "${CLAUDE_PLUGIN_ROOT}/bin/install-deps.js"');
+});
+
+test('.mcp.json: heroku-ops runs node bin/launch-official.js; heroku-ops-gaps env has CLAUDE_PROJECT_DIR, CLAUDE_PLUGIN_ROOT and NODE_PATH', () => {
+  const s = readJson('.mcp.json').mcpServers;
+  assert.equal(s['heroku-ops'].command, 'node');
+  assert.deepEqual(s['heroku-ops'].args, ['${CLAUDE_PLUGIN_ROOT}/bin/launch-official.js']);
+  const g = s['heroku-ops-gaps'];
+  assert.equal(g.command, 'node');
+  assert.deepEqual(g.args, ['${CLAUDE_PLUGIN_ROOT}/mcp-gaps/server.js']);
+  assert.equal(g.env.CLAUDE_PROJECT_DIR, '${CLAUDE_PROJECT_DIR}');
+  assert.equal(g.env.CLAUDE_PLUGIN_ROOT, '${CLAUDE_PLUGIN_ROOT}');
+  assert.equal(g.env.NODE_PATH, '${CLAUDE_PLUGIN_DATA}/node_modules');
+});
+
+test('guard.js and launch-official.js start from a plugin root with spaces in the path', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'plug in-'));
+  try {
+    const root = path.join(tmp, 'plug in');
+    for (const d of ['hooks', 'lib', 'bin', 'mcp-gaps']) {
+      fs.cpSync(path.join(ROOT, d), path.join(root, d), {
+        recursive: true,
+        filter: (src) => path.basename(src) !== 'test',
+      });
+    }
+    fs.copyFileSync(path.join(ROOT, 'package.json'), path.join(root, 'package.json'));
+    const project = path.join(tmp, 'my project');
+    fs.mkdirSync(project);
+    // Dependencies come from the repo node_modules through NODE_PATH, as in the data-dir pattern.
+    const env = {
+      ...process.env,
+      NODE_PATH: path.join(ROOT, 'node_modules'),
+      CLAUDE_PROJECT_DIR: project,
+      CLAUDE_PLUGIN_ROOT: root,
+    };
+    delete env.CLAUDE_PLUGIN_DATA;
+
+    const hookInput = JSON.stringify({
+      hook_event_name: 'PreToolUse',
+      tool_name: policy.MCP_PREFIX + 'ps_list',
+      tool_input: { app: 'x' },
+    });
+    const g = spawnSync(process.execPath, [path.join(root, 'hooks', 'guard.js')], { env, input: hookInput, encoding: 'utf8' });
+    assert.equal(g.status, 0, g.stderr);
+    const out = JSON.parse(g.stdout).hookSpecificOutput;
+    assert.equal(out.permissionDecision, 'deny');
+    assert.match(out.permissionDecisionReason, /rogue-heroku-ops:heroku-ops/);
+
+    const fake = path.join(tmp, 'nosession.js');
+    fs.writeFileSync(fake, 'process.exit(1);');
+    const l = spawnSync(process.execPath, [path.join(root, 'bin', 'launch-official.js')], {
+      env: { ...env, HEROKU_OPS_TEST_HEROKU: fake },
+      encoding: 'utf8',
+    });
+    assert.equal(l.status, 1);
+    assert.match(l.stderr, /Run "heroku login" and restart Claude Code\./);
+    assert.equal(l.stdout, '');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
