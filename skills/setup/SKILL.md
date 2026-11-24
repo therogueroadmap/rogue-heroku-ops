@@ -38,10 +38,17 @@ If it fails or prints nothing: tell the person to run `heroku login` themselves 
 
 1. Run this pipeline, which prints only the name of each app (one per line) and never the raw JSON: `heroku apps --json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{for(const a of JSON.parse(s))console.log(a.name)})"`. Use only that output (the names). Do not echo or keep the rest of the JSON.
 2. Ask which apps to allow (at least one). For each chosen app ask:
-   - `healthUrl`: http or https URL of its health endpoint (for example `https://my-app.herokuapp.com/health`).
+   - `healthUrl`: http or https URL of its health endpoint. **Never build the domain by hand**: Heroku apps created since 2023 use a suffixed domain (`<app>-<hash>.herokuapp.com`), and the short `<app>.herokuapp.com` returns 404. Get the base URL from the CLI instead (see "Base URL of an app" below), ask the person only for the path of the health endpoint (for example `/health`, or `/actuator/health` on Spring Boot), and join both.
    - `deployBranch`: git branch deployed to it (for example `main` for production, `develop` for staging).
 3. Ask whether to configure migrations. If yes, offer the Flyway preset below and let the person adjust any field. If no, omit `migrations` (the agent reports migrations as "not configured").
 4. Ask `n1Mode`: `ask` (default; state-changing actions ask for confirmation) or `deny` (they are denied and the exact command is shown to the person).
+
+Base URL of an app (read-only; run it once per chosen app):
+
+1. Run `heroku apps:info --app <name> --json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).app.web_url))"`. It prints only `app.web_url` (the real default domain, with a trailing slash). Do not echo the rest of the JSON.
+2. If the app may have a custom domain, run `heroku domains --app <name> --json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{for(const d of JSON.parse(s))console.log(d.hostname,d.kind)})"` and offer the `custom` hostnames as an alternative base (`https://<hostname>`). The default is `web_url`.
+3. Join the chosen base and the path without a double slash (for example `web_url` + `health`).
+4. Before writing it, offer to check the URL with a GET that expects a 2xx: `node -e "fetch(process.argv[1]).then(r=>console.log(r.status))" "<healthUrl>"`. If it is not 2xx (404, 401, 503), show the status and ask the person to correct the path or base. Never write a URL that was not checked, unless the person insists.
 
 Flyway preset (the `migrations` block):
 
@@ -55,7 +62,7 @@ Flyway preset (the `migrations` block):
 
 Rules for the values (the validator enforces them):
 - `name`: `^[a-z][a-z0-9-]{1,29}$`.
-- `healthUrl`: http or https.
+- `healthUrl`: http or https, taken from `web_url` or a custom domain, never guessed.
 - `repoDir`: safe relative path inside the project (no absolute path, no `..`).
 - `appliedQuery`: read-only SQL only.
 - `filePattern`: a valid regex.
@@ -69,7 +76,7 @@ Rules for the values (the validator enforces them):
 ```json
 {
   "apps": [
-    { "name": "my-app", "healthUrl": "https://my-app.herokuapp.com/health", "deployBranch": "main" }
+    { "name": "my-app", "healthUrl": "https://my-app-1a2b3c4d5e6f.herokuapp.com/health", "deployBranch": "main" }
   ],
   "migrations": {
     "repoDir": "db/migration",
@@ -128,6 +135,7 @@ Tell the person:
 ## Common mistakes
 
 - Running `heroku auth:token`, `heroku config` or `heroku apps` without `--json` and echoing all of it. Only names and the account identity may be shown.
+- Writing a `healthUrl` with the short `<app>.herokuapp.com` domain instead of the `web_url` from `heroku apps:info`: it returns 404.
 - Writing the config when there is no session or validation failed.
 - Adding `sqlRewrite` or any unknown key: the config becomes invalid.
 - Applying the `permissions.deny` block instead of showing it.

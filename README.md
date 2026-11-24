@@ -53,12 +53,12 @@ A `SessionStart` hook installs `@modelcontextprotocol/sdk` and `zod` into `${CLA
 
 ### Configuration
 
-The config file is exactly `${CLAUDE_PROJECT_DIR}/.claude/rogue-heroku-ops.json`; there is no search upwards. Example:
+The config file is exactly `${CLAUDE_PROJECT_DIR}/.claude/rogue-heroku-ops.json`; there is no search upwards. Use the real `web_url` of the app (`heroku apps:info --app <name> --json`, field `app.web_url`) or a custom domain for `healthUrl`: apps created since 2023 have a suffixed domain, and `<app>.herokuapp.com` returns 404. Example:
 
 ```json
 {
   "apps": [
-    { "name": "my-app", "healthUrl": "https://my-app.herokuapp.com/health", "deployBranch": "main" }
+    { "name": "my-app", "healthUrl": "https://my-app-1a2b3c4d5e6f.herokuapp.com/health", "deployBranch": "main" }
   ],
   "migrations": {
     "repoDir": "db/migration",
