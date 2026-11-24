@@ -192,6 +192,25 @@ test('hasGitSegment and patternTargetsCredentials: .git segments', () => {
   assert.equal(policy.patternTargetsCredentials('**/.github/*.yml'), false);
 });
 
+test('hasGitSegment: NTFS aliases of .git', () => {
+  for (const p of ['.git./config', '.git /config', '.GIT.../config', '.git::$INDEX_ALLOCATION/config', 'a\\.git:x\\config']) {
+    assert.equal(policy.hasGitSegment(p), true, p);
+  }
+  for (const p of ['.github/workflows/x.yml', '.gitignore', 'src/git/x.js', '.gitattributes']) {
+    assert.equal(policy.hasGitSegment(p), false, p);
+  }
+});
+
+test('patternTargetsCredentials: wildcard segments that match .git', () => {
+  const c = policy.patternTargetsCredentials;
+  for (const p of ['.gi?/config', '.g*/config', '.[g]it/config', '.git*/**', '**/.gi?/**', '[.]git/config', '.gi*']) {
+    assert.equal(c(p), true, p);
+  }
+  for (const p of ['**/*.js', 'src/*.sql', '*.md', 'migrations/**', '.github/**']) {
+    assert.equal(c(p), false, p);
+  }
+});
+
 test('isCredentialPath', () => {
   const c = policy.isCredentialPath;
   for (const p of ['.env', 'a/.env.local', 'a\\.ENV', '.netrc', 'x/server.pem', 'k.KEY', 'id_rsa', 'id_rsa.pub', '.npmrc', '.pgpass', '.env.', '.env:stream']) {

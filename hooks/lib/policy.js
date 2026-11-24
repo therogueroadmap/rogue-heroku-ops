@@ -266,7 +266,7 @@ function isCredentialPath(p) {
 
 /** True if any segment is ".git" (any case): git internals (.git/config) can hold a token in the remote URL. */
 function hasGitSegment(p) {
-  return typeof p === 'string' && segmentsOf(p).some((x) => x.toLowerCase() === '.git');
+  return typeof p === 'string' && segmentsOf(p).some((x) => normalizeName(x) === '.git');
 }
 
 /**
@@ -281,9 +281,10 @@ function patternTargetsCredentials(pattern) {
     if (SHORT_NAME_PATTERN_RE.test(seg)) return true;
     if (isCredentialName(seg)) return true;
     try {
-      const body = seg.toLowerCase().replace(/[.+^${}()|\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.');
+      const body = normalizeName(seg).replace(/[.+^${}()|\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.');
       const re = new RegExp('^' + body + '$');
-      if (CREDENTIAL_SAMPLES.some((n) => re.test(n))) return true;
+      // ".git" is tested too: a wildcard segment (".gi?", ".[g]it", ".git*") can reach git internals.
+      if (CREDENTIAL_SAMPLES.some((n) => re.test(n)) || re.test('.git')) return true;
     } catch (_e) {
       return true; // unparsable pattern: fail closed
     }

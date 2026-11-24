@@ -441,6 +441,15 @@ test('.git internals inside repoPath and the project -> deny (the remote URL may
   assert.equal(r('Glob', { path: repo, pattern: '**/*.sql' }).decision, 'allow');
 });
 
+test('.git aliases and wildcard segments -> deny; normal patterns and .github -> allow', () => {
+  assert.equal(rv('Read', { file_path: path.join(repo, '.git.', 'config') }).decision, 'deny');
+  assert.equal(rv('Glob', { path: repo, pattern: '.gi?/config' }).decision, 'deny');
+  assert.equal(rv('Grep', { pattern: 'url', path: repo, glob: '.[g]it/*' }).decision, 'deny');
+  assert.equal(rv('Glob', { path: repo, pattern: '{.git,x}/config' }).decision, 'deny');
+  assert.equal(rv('Glob', { path: repo, pattern: '**/*.js' }).decision, 'allow');
+  assert.equal(rv('Read', { file_path: path.join(repo, '.github', 'workflows', 'ci.yml') }).decision, 'allow');
+});
+
 test('Grep inside repoPath with a simple glob -> allow', () => {
   assert.equal(rv('Grep', { pattern: 'SELECT', path: repo, glob: '**/*.sql' }).decision, 'allow');
 });
