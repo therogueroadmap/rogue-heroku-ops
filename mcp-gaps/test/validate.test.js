@@ -3,10 +3,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { validateRev, validateRange, validatePath, validatePaths } = require('../lib/validate');
 
-const BR = 'releaseCandidate';
+const BR = ['release'];
 
 test('validateRev accepts valid revs', () => {
-  for (const r of ['HEAD', 'origin/releaseCandidate', 'abc1234', 'a'.repeat(40)]) {
+  for (const r of ['HEAD', 'origin/release', 'abc1234', 'a'.repeat(40)]) {
     assert.deepEqual(validateRev(r, BR), { ok: true, value: r }, r);
   }
 });
@@ -24,14 +24,14 @@ test('validateRev rejects invalid revs', () => {
 
 test('validateRev rejects origin/ refs when deployBranch is malformed', () => {
   for (const b of ['a b', 'x..y', '-x', '', 'a/', undefined, 'a.*']) {
-    assert.equal(validateRev('origin/' + b, b).ok, false, String(b));
+    assert.equal(validateRev('origin/' + b, [b]).ok, false, String(b));
   }
-  assert.equal(validateRev('origin/feat/x-1', 'feat/x-1').ok, true);
+  assert.equal(validateRev('origin/feat/x-1', ['feat/x-1']).ok, true);
 });
 
 test('validateRange accepts REV..REV', () => {
-  assert.deepEqual(validateRange('origin/releaseCandidate..HEAD', BR), {
-    ok: true, value: 'origin/releaseCandidate..HEAD', from: 'origin/releaseCandidate', to: 'HEAD',
+  assert.deepEqual(validateRange('origin/release..HEAD', BR), {
+    ok: true, value: 'origin/release..HEAD', from: 'origin/release', to: 'HEAD',
   });
 });
 
@@ -70,4 +70,17 @@ test('validatePaths', () => {
   assert.equal(validatePaths(Array.from({ length: 20 }, (_, i) => 'f' + i)).ok, true);
   assert.equal(validatePaths('a').ok, false);
   assert.match(validatePaths('a').reason, /paths/);
+});
+
+test('validateRev and validateRange accept origin/<b> for any deploy branch', () => {
+  assert.equal(validateRev('origin/develop', ['main', 'develop']).ok, true);
+  assert.equal(validateRev('origin/main', ['main', 'develop']).ok, true);
+  assert.equal(validateRev('origin/feature', ['main', 'develop']).ok, false);
+  assert.equal(validateRange('origin/main..origin/develop', ['main', 'develop']).ok, true);
+  assert.equal(validateRange('origin/main..origin/feature', ['main', 'develop']).ok, false);
+});
+
+test('validation messages are English', () => {
+  assert.match(validateRev('x', BR).reason, /^The rev parameter must be/);
+  assert.match(validatePath('../x').reason, /^The path parameter must be/);
 });

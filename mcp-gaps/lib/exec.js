@@ -1,5 +1,5 @@
 'use strict';
-// Execution layer: locates the Heroku CLI (node.exe + run.js, never .cmd),
+// Execution layer: locates the Heroku CLI (on Windows node.exe + run.js, never .cmd; elsewhere heroku on PATH),
 // builds a sanitized child env and runs files with execFile semantics (no shell).
 const fs = require('node:fs');
 const path = require('node:path');
@@ -11,8 +11,8 @@ const MAX_STDOUT = 65536;
 const MAX_STDERR = 4096;
 
 const NOT_FOUND_MSG =
-  'No se encontró la CLI de Heroku. Instálala o actualízala (https://devcenter.heroku.com/articles/heroku-cli) ' +
-  'y vuelve a intentarlo; no hace falta reiniciar el servidor.';
+  'Heroku CLI not found. Install or update it (https://devcenter.heroku.com/articles/heroku-cli) ' +
+  'and try again; the server does not need a restart.';
 
 function isFile(p) {
   try {
@@ -78,6 +78,30 @@ function resolveHerokuCli({ localAppData, programFiles, override } = {}) {
   }
 
   throw new Error(NOT_FOUND_MSG);
+}
+
+// Finds the `heroku` executable on PATH (macOS and Linux).
+function findOnPath(env) {
+  const dirs = String(env?.PATH ?? env?.Path ?? '').split(path.delimiter).filter(Boolean);
+  for (const dir of dirs) {
+    const candidate = path.join(dir, 'heroku');
+    if (isFile(candidate)) return candidate;
+  }
+  return null;
+}
+
+// Command to run the Heroku CLI: { file, prefixArgs }. The override (tests) runs a script with node;
+// Windows keeps the node.exe + run.js resolver; macOS and Linux use heroku from PATH.
+// Resolved on every call: the CLI may be installed or updated while the server runs.
+function resolveHerokuCommand({ platform = process.platform, env = process.env, override } = {}) {
+  if (override) return { file: process.execPath, prefixArgs: [override] };
+  if (platform === 'win32') {
+    const cli = resolveHerokuCli({ localAppData: env.LOCALAPPDATA, programFiles: env.ProgramFiles });
+    return { file: cli.node, prefixArgs: [cli.script] };
+  }
+  const found = findOnPath(env);
+  if (!found) throw new Error(NOT_FOUND_MSG);
+  return { file: found, prefixArgs: [] };
 }
 
 function buildChildEnv(baseEnv) {
@@ -185,6 +209,7 @@ function runFile(file, args, opts) {
 
 module.exports = {
   resolveHerokuCli,
+  resolveHerokuCommand,
   buildChildEnv,
   runFile,
   utf8CompleteLength,
