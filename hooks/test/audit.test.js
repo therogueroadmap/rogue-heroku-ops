@@ -165,7 +165,7 @@ function runAudit(input) {
 }
 
 test('audit.js appends one JSONL line, no stdout, exit 0', () => {
-  const { r, dir } = runAudit(JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'heroku releases' } }));
+  const { r, dir } = runAudit(JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'heroku releases' }, agent_type: AGENT }));
   assert.equal(r.status, 0);
   assert.equal(r.stdout, '');
   const files = fs.readdirSync(path.join(dir, 'audit'));
@@ -247,4 +247,27 @@ test('successful PostToolUse keeps error false', () => {
     tool_response: { stdout: 'ok' },
   }, NOW);
   assert.equal(e.error, false);
+});
+
+test('audit.js: Read/Grep from the main session -> no audit line; plugin agent and plugin tools still audited', () => {
+  for (const input of [
+    { tool_name: 'Read', tool_input: { file_path: 'x' } },
+    { tool_name: 'Grep', tool_input: { pattern: 'x' }, agent_type: 'other:agent' },
+  ]) {
+    const { r, dir } = runAudit(JSON.stringify(input));
+    assert.equal(r.status, 0);
+    assert.equal(r.stdout, '');
+    assert.equal(fs.existsSync(path.join(dir, 'audit')), false);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+  for (const input of [
+    { tool_name: 'Read', tool_input: { file_path: 'x' }, agent_type: AGENT },
+    { tool_name: T + 'ps_list', tool_input: { app: 'a' } },
+    { tool_name: 'mcp__plugin_rogue-heroku-ops_heroku-ops-gaps__git_log', tool_input: {} },
+  ]) {
+    const { r, dir } = runAudit(JSON.stringify(input));
+    assert.equal(r.status, 0);
+    assert.equal(fs.readdirSync(path.join(dir, 'audit')).length, 1);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });

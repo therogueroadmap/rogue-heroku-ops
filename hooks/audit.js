@@ -9,8 +9,14 @@ const path = require('node:path');
 try {
   // Inside the try: a missing lib/ must not crash the hook.
   const { buildAuditEntry, auditFile } = require('./lib/audit-entry.js');
+  const { PLUGIN_AGENT, MCP_PREFIX, GAPS_PREFIX } = require('./lib/policy.js');
   const raw = fs.readFileSync(0, 'utf8');
   const input = JSON.parse(raw);
+  // Only the plugin agent and plugin tools are audited: main-session calls (Read, Grep...) are not.
+  const tool = input && typeof input.tool_name === 'string' ? input.tool_name : '';
+  if (input.agent_type !== PLUGIN_AGENT && !tool.startsWith(MCP_PREFIX) && !tool.startsWith(GAPS_PREFIX)) {
+    process.exit(0);
+  }
   const entry = buildAuditEntry(input, new Date());
   const file = auditFile(process.env, entry.ts);
   if (file) {

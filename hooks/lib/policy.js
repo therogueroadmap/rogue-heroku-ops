@@ -209,12 +209,16 @@ const CREDENTIAL_SAMPLES = [
 // NTFS aliases: alternate data stream suffix (":$DATA"), trailing dots and spaces.
 const normalizeName = (n) => n.toLowerCase().replace(/:.*$/, '').replace(/[. ]+$/, '');
 const isCredentialName = (n) => CREDENTIAL_NAME_RES.some((re) => re.test(normalizeName(n)));
+const SHORT_NAME_RE = /~\d/;
+const SHORT_NAME_PATTERN_RE = /~[\d*?[]/;
 const segmentsOf = (p) => p.split(/[\\/]/).filter((x) => x !== '' && x !== '.');
 
 /** True if the last segment of a file or directory path is a credential file name. */
 function isCredentialPath(p) {
   if (typeof p !== 'string') return false;
   const segs = segmentsOf(p);
+  // NTFS 8.3 short names (ENV~1, ENV~1.LOC) alias credential files: any "~digit" segment is denied, on every platform.
+  if (segs.some((x) => SHORT_NAME_RE.test(x))) return true;
   return segs.length > 0 && isCredentialName(segs[segs.length - 1]);
 }
 
@@ -226,6 +230,7 @@ function patternTargetsCredentials(pattern) {
   if (typeof pattern !== 'string') return false;
   for (const seg of segmentsOf(pattern)) {
     if (/^[*?]+$/.test(seg)) continue;
+    if (SHORT_NAME_PATTERN_RE.test(seg)) return true;
     if (isCredentialName(seg)) return true;
     try {
       const body = seg.toLowerCase().replace(/[.+^${}()|\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.');

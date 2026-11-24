@@ -3,12 +3,15 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const os = require('node:os');
 const path = require('node:path');
+const fs = require('node:fs');
 const { evaluate } = require('../lib/evaluate.js');
 const { SETUP_HINT } = require('../../lib/config.js');
 
 const AGENT = 'rogue-heroku-ops:heroku-ops';
 const APP = 'my-app';
 const proj = path.join(os.tmpdir(), 'rho-eval-project');
+fs.mkdirSync(path.join(proj, 'src'), { recursive: true });
+fs.writeFileSync(path.join(proj, 'pom.xml'), '<project/>');
 const mkCfg = (over = {}) => ({
   ok: true,
   file: path.join(proj, '.claude', 'rogue-heroku-ops.json'),
@@ -80,7 +83,7 @@ test('agent Read of .env, .env.local, .netrc, *.pem and other credential files i
 
 test('Grep and Glob need a path inside the project', () => {
   assert.equal(ev('Grep', { pattern: 'x' }).decision, 'deny');
-  assert.equal(ev('Grep', { pattern: 'x', path: proj }).decision, 'allow');
+  assert.equal(ev('Grep', { pattern: 'x', path: proj, glob: '*.js' }).decision, 'allow');
   assert.equal(ev('Glob', { pattern: '*' }).decision, 'deny');
   assert.equal(ev('Glob', { pattern: '*', path: path.join(os.tmpdir(), 'elsewhere') }).decision, 'deny');
   assert.equal(ev('Glob', { pattern: '*', path: proj }).decision, 'allow');
@@ -94,7 +97,7 @@ test('Glob pattern and Grep glob: absolute (either platform), ".." or braces -> 
   assert.equal(ev('Glob', { pattern: '**/*.md', path: proj }).decision, 'allow');
   assert.equal(ev('Grep', { pattern: 'x', path: proj, glob: '*.js' }).decision, 'allow');
   // the Grep regex itself is not a path
-  assert.equal(ev('Grep', { pattern: 'a{2}..b', path: proj }).decision, 'allow');
+  assert.equal(ev('Grep', { pattern: 'a{2}..b', path: proj, glob: '*.js' }).decision, 'allow');
 });
 
 test('Glob and Grep aimed at credential files -> deny', () => {
@@ -105,6 +108,41 @@ test('Glob and Grep aimed at credential files -> deny', () => {
   assert.equal(ev('Grep', { pattern: 'x', path: path.join(proj, '.env') }).decision, 'deny');
   assert.equal(ev('Glob', { pattern: '**/*', path: proj }).decision, 'allow');
   assert.equal(ev('Glob', { pattern: 'src/**/*.java', path: proj }).decision, 'allow');
+});
+
+test('NTFS 8.3 short names (~digit) are denied in Read, Grep and Glob', () => {
+  for (const name of ['ENV~1', 'ENV~1.LOC', 'NETRC~1', 'env~2.pro']) {
+    const d = ev('Read', { file_path: path.join(proj, name) });
+    assert.equal(d.decision, 'deny', name);
+    assert.match(d.reason, /credential/);
+    assert.equal(ev('Read', { file_path: path.join(proj, name, 'x.txt') }).decision, 'deny', name);
+    assert.equal(ev('Grep', { pattern: 'x', path: path.join(proj, name) }).decision, 'deny', name);
+    assert.equal(ev('Grep', { pattern: 'x', path: proj, glob: name }).decision, 'deny', name);
+    assert.equal(ev('Grep', { pattern: 'x', path: proj, glob: '**/' + name }).decision, 'deny', name);
+    assert.equal(ev('Glob', { pattern: '**/' + name, path: proj }).decision, 'deny', name);
+  }
+  assert.equal(ev('Read', { file_path: path.join(proj, 'a~b.txt') }).decision, 'allow');
+});
+
+test('agent Grep over a directory needs a literal, non-credential glob', () => {
+  for (const input of [
+    { pattern: 'PASSWORD|KEY', path: proj, output_mode: 'content' },
+    { pattern: 'x', path: proj, glob: '*' },
+    { pattern: 'x', path: proj, glob: '**/*' },
+    { pattern: 'x', path: proj, type: 'js' },
+    { pattern: 'x', path: path.join(proj, 'src') },
+    { pattern: 'x', path: path.join(proj, 'missing-dir'), glob: '*.js' },
+  ]) {
+    assert.equal(ev('Grep', input).decision, 'deny', JSON.stringify(input));
+  }
+  const d = ev('Grep', { pattern: 'x', path: proj });
+  assert.match(d.reason, /needs a glob such as \*\*\/\*\.js/);
+  assert.equal(ev('Grep', { pattern: 'x', path: proj, glob: '**/*.js' }).decision, 'allow');
+  assert.equal(ev('Grep', { pattern: 'x', path: proj, glob: 'src\\*' }).decision, 'deny');
+  assert.equal(ev('Grep', { pattern: 'x', path: proj, glob: 'src\\*.js' }).decision, 'allow');
+  assert.equal(ev('Grep', { pattern: 'x', path: path.join(proj, 'src'), glob: '*.java' }).decision, 'allow');
+  // a file path needs no glob
+  assert.equal(ev('Grep', { pattern: 'x', path: path.join(proj, 'pom.xml') }).decision, 'allow');
 });
 
 // Rule 5 (missing or invalid config)

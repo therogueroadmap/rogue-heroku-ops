@@ -2,6 +2,7 @@
 // Pure module: PreToolUse decision for every tool the guard sees (spec 6.5, rules 1 to 5, in order).
 // Returns null for "no decision". Fail closed: unknown tool, unreadable input or any exception -> deny.
 
+const fs = require('node:fs');
 const path = require('node:path');
 const {
   PLUGIN_AGENT, MCP_PREFIX, GAPS_PREFIX, classifyMcpTool, checkMcpInput, isPathAllowed,
@@ -90,7 +91,25 @@ function evaluatePathTool(toolName, input, projectDir) {
   if (isCredentialPath(p) || patternTargetsCredentials(pattern)) {
     return deny(`${toolName}: reading .env files and credential files is not allowed.`);
   }
+  if (toolName === 'Grep' && !grepScopeOk(p, pattern, projectDir)) {
+    return deny('Grep over a directory needs a glob such as **/*.js (a literal file name or extension that is not a credential file).');
+  }
   return allowN0(`${toolName} inside the project directory.`);
+}
+
+// Grep over a directory searches file contents of the whole tree: it needs a glob whose last segment has
+// a literal character. A file path needs no glob. If the path cannot be inspected: not ok (fail closed).
+function grepScopeOk(p, glob, projectDir) {
+  let isDir;
+  try {
+    isDir = fs.statSync(path.resolve(projectDir, p)).isDirectory();
+  } catch (_e) {
+    return false;
+  }
+  if (!isDir) return true;
+  if (typeof glob !== 'string') return false;
+  const segs = glob.split(/[\\/]/).filter((x) => x !== '' && x !== '.');
+  return segs.length > 0 && /[^*?[\]]/.test(segs[segs.length - 1]);
 }
 
 /**

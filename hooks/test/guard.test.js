@@ -260,3 +260,19 @@ test('PowerShell pg:psql is denied (no rewrite, no updatedInput)', () => {
   assert.equal(o.permissionDecision, 'deny');
   assert.equal(o.updatedInput, undefined);
 });
+
+test('main-session Read/Grep/Glob exit 0 with no stdout even without config (before loading anything)', () => {
+  const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'guard-noconfig-'));
+  for (const tool of ['Read', 'Grep', 'Glob']) {
+    for (const agent of [null, 'other:agent']) {
+      const r = run(call(tool, { file_path: 'x', pattern: 'x' }, agent), { project: empty });
+      assert.equal(r.status, 0, tool);
+      assert.equal(r.stdout, '', tool);
+    }
+  }
+  // the early exit is only for those tools: anything else without config is still denied
+  const bad = run(call('Bash', { command: 'ls' }, null), { project: empty });
+  assert.equal(out(bad).permissionDecision, 'deny');
+  const garbage = run('not json', { project: empty });
+  assert.equal(out(garbage).permissionDecision, 'deny');
+});

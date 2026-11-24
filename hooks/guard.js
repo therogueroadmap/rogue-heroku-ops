@@ -64,9 +64,15 @@ function auditDecision(hookInput, d) {
 let hookInput = null;
 let d;
 try {
+  hookInput = JSON.parse(fs.readFileSync(0, 'utf8'));
+  // Main session and other agents keep their own Read/Grep/Glob: leave before loading anything else,
+  // so a broken module or config can never block them. Literal, no dependencies.
+  if (hookInput && ['Read', 'Grep', 'Glob'].includes(hookInput.tool_name) &&
+      hookInput.agent_type !== 'rogue-heroku-ops:heroku-ops') {
+    process.exit(0);
+  }
   const { evaluate } = require('./lib/evaluate.js');
   const { loadProjectConfig } = require('../lib/config.js');
-  hookInput = JSON.parse(fs.readFileSync(0, 'utf8'));
   const projectDir = process.env.CLAUDE_PROJECT_DIR;
   d = evaluate(hookInput, loadProjectConfig(projectDir), projectDir);
   if (d === null) process.exit(0); // no decision: leave the session alone

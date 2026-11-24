@@ -22,7 +22,7 @@ const OK = [
 const NOT_OK = [
   '',
   '   ',
-  '-- solo comentario',
+  '-- comment only',
   'SELECT 1; DELETE FROM t',
   'WITH d AS (DELETE FROM t RETURNING *) SELECT * FROM d',
   'EXPLAIN ANALYZE DELETE FROM t',
@@ -138,5 +138,5 @@ test('redactSql', () => {
     "SELECT * FROM users WHERE email = '?' AND id = ?"
   );
   assert.equal(redactSql("SELECT 'it''s', t1.col12 FROM t1 WHERE x = 3.5"), "SELECT '?', t1.col12 FROM t1 WHERE x = ?");
-  assert.equal(redactSql("SELECT 'sin cierre 123"), "SELECT '?'");
+  assert.equal(redactSql("SELECT 'unclosed 123"), "SELECT '?'");
 });

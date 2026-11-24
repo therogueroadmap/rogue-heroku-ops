@@ -110,14 +110,14 @@ function collapse(s) {
 }
 
 function validateReadOnlySql(sql) {
-  if (typeof sql !== 'string' || sql.trim() === '') return fail('SQL vacío.');
-  if (sql.includes('\\')) return fail('El SQL contiene una barra invertida (comandos de psql o escapes).');
+  if (typeof sql !== 'string' || sql.trim() === '') return fail('Empty SQL.');
+  if (sql.includes('\\')) return fail('The SQL contains a backslash (psql commands or escapes).');
   // Rule 2 forbids "$$"; any "$" is rejected because tagged dollar quoting ($tag$...$tag$) would defeat the literal scan.
-  if (sql.includes('$')) return fail('El SQL contiene "$" (dollar quoting no permitido).');
-  if (sql.includes('"')) return fail('El SQL contiene comillas dobles (identificadores entrecomillados no permitidos).');
+  if (sql.includes('$')) return fail('The SQL contains "$" (dollar quoting is not allowed).');
+  if (sql.includes('"')) return fail('The SQL contains double quotes (quoted identifiers are not allowed).');
 
   const scanned = scan(sql);
-  if (!scanned) return fail('Literal o comentario de bloque sin cerrar.');
+  if (!scanned) return fail('Unterminated literal or block comment.');
 
   let statement = collapse(scanned.text).trim();
   let skeleton = collapse(scanned.skeleton).trim();
@@ -125,21 +125,21 @@ function validateReadOnlySql(sql) {
     statement = statement.slice(0, -1).trimEnd();
     skeleton = skeleton.slice(0, -1).trimEnd();
   }
-  if (statement === '') return fail('SQL vacío tras quitar comentarios.');
-  if (skeleton.includes(';')) return fail('Se permite una sola sentencia (se detectó ";" adicional).');
+  if (statement === '') return fail('Empty SQL after removing comments.');
+  if (skeleton.includes(';')) return fail('Only one statement is allowed (an extra ";" was found).');
 
   const up = skeleton.toUpperCase();
   const first = /^[A-Z]+\b/.exec(up);
   if (!first || !['SELECT', 'WITH', 'EXPLAIN', 'SHOW'].includes(first[0])) {
-    return fail('Solo se permiten sentencias que empiecen por SELECT, WITH, EXPLAIN o SHOW.');
+    return fail('Only statements starting with SELECT, WITH, EXPLAIN or SHOW are allowed.');
   }
   if (first[0] === 'EXPLAIN' && /\bANALY[ZS]E\b/.test(up)) {
-    return fail('EXPLAIN ANALYZE ejecuta la sentencia y no está permitido.');
+    return fail('EXPLAIN ANALYZE runs the statement and is not allowed.');
   }
   const word = FORBIDDEN_RE.exec(up);
-  if (word) return fail(`Palabra clave no permitida en SQL de solo lectura: ${word[0]}.`);
+  if (word) return fail(`Keyword not allowed in read-only SQL: ${word[0]}.`);
   if (EFFECT_FN_RE.test(up) || EFFECT_PREFIX_RE.test(up)) {
-    return fail('El SQL llama a una función con efectos o acceso a archivos/conexiones.');
+    return fail('The SQL calls a function with side effects or file/connection access.');
   }
   return { ok: true, statement };
 }
