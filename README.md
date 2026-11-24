@@ -30,7 +30,7 @@ Operations that change something (manual backup, dyno restart, maintenance mode 
 - `git`.
 - `psql` (only needed for database queries and migration checks).
 
-Heroku CLI, `git` and `psql` are resolved from your `PATH`.
+Heroku CLI, `git` and `psql` are resolved from your `PATH`. On Windows, if `psql` is not on the `PATH`, the plugin uses the standard installation at `%ProgramFiles%\PostgreSQL\<version>\bin` (the highest version). On other systems `psql` must be on the `PATH`.
 
 ## Installation
 

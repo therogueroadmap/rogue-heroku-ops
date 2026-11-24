@@ -26,6 +26,8 @@ Run each one separately and report present / missing with its version:
 | git | `git --version` | https://git-scm.com/downloads |
 | psql | `psql --version` | https://www.postgresql.org/download/ |
 
+On Windows, if `psql --version` fails, check for `$env:ProgramFiles\PostgreSQL\*\bin\psql.exe` (PowerShell: `Get-ChildItem "$env:ProgramFiles\PostgreSQL\*\bin\psql.exe"`). If it exists, report "found at <folder>, not on PATH; the plugin uses it automatically" instead of "missing".
+
 Node older than 20 counts as missing. A missing tool does not abort the run, except the Heroku CLI and Node: without the Heroku CLI, stop after reporting (steps 2 to 4 need it); without Node (or with Node older than 20), stop after reporting too (the config validator in step 4, the hooks and the plugin servers need it). Say what each missing tool disables: `git` (release and deploy-branch checks), `psql` (database queries and migrations).
 
 ### 2. Check the Heroku session

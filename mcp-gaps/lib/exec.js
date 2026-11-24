@@ -208,6 +208,7 @@ function runFile(file, args, opts) {
 }
 
 module.exports = {
+  isFile,
   resolveHerokuCli,
   resolveHerokuCommand,
   buildChildEnv,
