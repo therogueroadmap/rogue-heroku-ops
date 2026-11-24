@@ -136,13 +136,44 @@ test('agent Grep over a directory needs a literal, non-credential glob', () => {
     assert.equal(ev('Grep', input).decision, 'deny', JSON.stringify(input));
   }
   const d = ev('Grep', { pattern: 'x', path: proj });
-  assert.match(d.reason, /needs a glob such as \*\*\/\*\.js/);
+  assert.equal(d.reason, 'Grep over a directory needs a simple glob such as **/*.js or src/*.sql.');
   assert.equal(ev('Grep', { pattern: 'x', path: proj, glob: '**/*.js' }).decision, 'allow');
   assert.equal(ev('Grep', { pattern: 'x', path: proj, glob: 'src\\*' }).decision, 'deny');
-  assert.equal(ev('Grep', { pattern: 'x', path: proj, glob: 'src\\*.js' }).decision, 'allow');
+  assert.equal(ev('Grep', { pattern: 'x', path: proj, glob: 'src\\*.js' }).decision, 'deny');
   assert.equal(ev('Grep', { pattern: 'x', path: path.join(proj, 'src'), glob: '*.java' }).decision, 'allow');
   // a file path needs no glob
   assert.equal(ev('Grep', { pattern: 'x', path: path.join(proj, 'pom.xml') }).decision, 'allow');
+});
+
+test('agent Grep over a directory: allow-list grammar for glob', () => {
+  const g = (glob, p = proj) => ev('Grep', { pattern: 'x', path: p, glob }).decision;
+  for (const glob of ['**/*.sql', '*.sql', 'db/migration/*.sql', '**/*.java', 'pom.xml', '**/*.d.ts', 'src/**/*.js']) {
+    assert.equal(g(glob), 'allow', glob);
+  }
+  for (const glob of ['!*.js', '!x', '*.js .env', '*.js,.env', '.e[n]v.dev*', '[.]env.dev*', '**/.env*', '*.pem',
+    '*.env', '.env', 'id_rsa', '*', '**/*', '*.*', '{a,b}.js', 'src/../x/*.js', '*.PEM', '*.tar.key', '*.js?', '~1/*.js',
+    '.git/*.js', 'src\\*.js', '*.js\n.env', '**/*.', '']) {
+    assert.equal(g(glob), 'deny', JSON.stringify(glob));
+  }
+  assert.equal(ev('Grep', { pattern: 'x', path: proj, glob: '!*.js' }).reason,
+    'Grep over a directory needs a simple glob such as **/*.js or src/*.sql.');
+});
+
+test('Glob tool keeps its own policy: **/*.sql and ** /* allowed', () => {
+  assert.equal(ev('Glob', { pattern: '**/*.sql', path: proj }).decision, 'allow');
+  assert.equal(ev('Glob', { pattern: '**/*', path: proj }).decision, 'allow');
+});
+
+test('project prefix with ~digit does not count (only the relative part)', () => {
+  const p = path.join(os.tmpdir(), 'RUNNER~1', 'rho-proj');
+  fs.mkdirSync(path.join(p, 'src'), { recursive: true });
+  const e = (name, input) => evaluate({ tool_name: name, tool_input: input, agent_type: AGENT }, okCfg, p);
+  assert.equal(e('Read', { file_path: path.join(p, 'src', 'a.txt') }).decision, 'allow');
+  assert.equal(e('Read', { file_path: path.join('src', 'a.txt') }).decision, 'allow');
+  assert.equal(e('Grep', { pattern: 'x', path: p, glob: '**/*.js' }).decision, 'allow');
+  assert.equal(e('Glob', { pattern: '**/*.js', path: p }).decision, 'allow');
+  assert.equal(e('Read', { file_path: path.join(p, 'ENV~1') }).decision, 'deny');
+  assert.equal(e('Read', { file_path: path.join(p, 'src', '.env') }).decision, 'deny');
 });
 
 // Rule 5 (missing or invalid config)

@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {
   PLUGIN_AGENT, MCP_PREFIX, GAPS_PREFIX, classifyMcpTool, checkMcpInput, isPathAllowed,
-  isCredentialPath, patternTargetsCredentials,
+  isCredentialPath, patternTargetsCredentials, isSimpleGrepGlob,
 } = require('./policy.js');
 const { validateReadOnlySql, wrapReadOnly, unwrapReadOnly } = require('./sql.js');
 
@@ -88,17 +88,19 @@ function evaluatePathTool(toolName, input, projectDir) {
   }
   const pattern = toolName === 'Glob' ? input.pattern : toolName === 'Grep' ? input.glob : undefined;
   if (escapesPath(pattern)) return deny(`${toolName}: the pattern leaves the project directory.`);
-  if (isCredentialPath(p) || patternTargetsCredentials(pattern)) {
+  // Only the part below the project counts: a project prefix such as C:\Users\RUNNER~1 is not a credential.
+  const rel = path.relative(path.resolve(projectDir), path.resolve(projectDir, p));
+  if (isCredentialPath(rel) || patternTargetsCredentials(pattern)) {
     return deny(`${toolName}: reading .env files and credential files is not allowed.`);
   }
   if (toolName === 'Grep' && !grepScopeOk(p, pattern, projectDir)) {
-    return deny('Grep over a directory needs a glob such as **/*.js (a literal file name or extension that is not a credential file).');
+    return deny('Grep over a directory needs a simple glob such as **/*.js or src/*.sql.');
   }
   return allowN0(`${toolName} inside the project directory.`);
 }
 
-// Grep over a directory searches file contents of the whole tree: it needs a glob whose last segment has
-// a literal character. A file path needs no glob. If the path cannot be inspected: not ok (fail closed).
+// Grep over a directory searches file contents of the whole tree: it needs a glob from the allow-list
+// grammar (isSimpleGrepGlob). A file path needs no glob. If the path cannot be inspected: not ok (fail closed).
 function grepScopeOk(p, glob, projectDir) {
   let isDir;
   try {
@@ -107,9 +109,7 @@ function grepScopeOk(p, glob, projectDir) {
     return false;
   }
   if (!isDir) return true;
-  if (typeof glob !== 'string') return false;
-  const segs = glob.split(/[\\/]/).filter((x) => x !== '' && x !== '.');
-  return segs.length > 0 && /[^*?[\]]/.test(segs[segs.length - 1]);
+  return isSimpleGrepGlob(glob);
 }
 
 /**

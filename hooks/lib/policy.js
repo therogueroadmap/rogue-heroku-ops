@@ -243,7 +243,33 @@ function patternTargetsCredentials(pattern) {
   return false;
 }
 
+const GREP_BLOCKED_EXTS = new Set([
+  'pem', 'key', 'env', 'p12', 'pfx', 'jks', 'tfvars', 'pgpass', 'netrc', 'keystore', 'asc', 'gpg',
+]);
+const GREP_DIR_SEG_RE = /^[A-Za-z0-9._-]+$/;
+const GREP_EXT_RE = /^\*\.([A-Za-z0-9]+)(?:\.([A-Za-z0-9]+))?$/;
+const GREP_LITERAL_RE = /^[A-Za-z0-9_-][A-Za-z0-9._-]*$/;
+
+/**
+ * Allow-list for the `glob` of an agent Grep over a directory. Segments are separated by "/";
+ * every segment before the last is "**" or a plain literal (no "..", no leading "."); the last is
+ * "*.<ext>" (ext not a credential extension) or a plain non-credential file name. Anything else is false.
+ */
+function isSimpleGrepGlob(glob) {
+  if (typeof glob !== 'string' || glob === '') return false;
+  const segs = glob.split('/');
+  const last = segs.pop();
+  for (const seg of segs) {
+    if (seg === '**') continue;
+    if (!GREP_DIR_SEG_RE.test(seg) || seg.startsWith('.')) return false;
+  }
+  const m = GREP_EXT_RE.exec(last);
+  if (m) return ![m[1], m[2]].some((e) => e !== undefined && GREP_BLOCKED_EXTS.has(e.toLowerCase()));
+  return GREP_LITERAL_RE.test(last) && !isCredentialName(last);
+}
+
 module.exports = {
+  isSimpleGrepGlob,
   PLUGIN_AGENT, MCP_PREFIX, MCP_N0, MCP_N1, GAPS_PREFIX, GAPS_N0, GAPS_N1, GAPS_KEYS,
   classifyMcpTool, checkMcpInput, isPathAllowed, isCredentialPath, patternTargetsCredentials,
 };
