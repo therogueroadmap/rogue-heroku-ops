@@ -364,6 +364,11 @@ test('git tools require a configured app', () => {
   for (const tool of ['git_show', 'git_ls_tree', 'git_diff']) assert.equal(ev(G(tool), { rev: 'HEAD' }).decision, 'deny', tool);
 });
 
+test('git_branches is N0 and requires app', () => {
+  assert.equal(ev(G('git_branches'), { app: APP }).decision, 'allow');
+  assert.equal(ev(G('git_branches'), {}).decision, 'deny');
+});
+
 test('any valid remote branch allowed in refs', () => {
   for (const [tool, input] of [
     ['git_log', { app: APP, rev: 'origin/feature/x' }],

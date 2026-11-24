@@ -86,7 +86,7 @@ const resetFake = () => {
   fs.rmSync(path.join(fakeDir, 'mode'), { force: true });
 };
 const ALL_TOOLS = [
-  'backup_capture', 'backup_info', 'get_config', 'get_procedure', 'git_diff', 'git_fetch', 'git_log',
+  'backup_capture', 'backup_info', 'get_config', 'get_procedure', 'git_branches', 'git_diff', 'git_fetch', 'git_log',
   'git_ls_tree', 'git_show', 'health_check', 'releases_list',
 ];
 
@@ -356,6 +356,33 @@ test('git runs in the repoPath of the app named in the call', async () => {
   assert.equal(none.isError, true);
   assert.match(text(none), /App app-a has no repository/);
   assert.equal((await call(c2, 'git_fetch', { app: 'zzz' })).isError, true);
+});
+
+test('git_branches drops origin and origin/HEAD', async () => {
+  const head = git('rev-parse', 'HEAD').trim();
+  const refs = ['refs/remotes/origin/HEAD', 'refs/remotes/origin/main', 'refs/remotes/origin/release/1.4'];
+  try {
+    git('update-ref', refs[1], head);
+    git('update-ref', refs[2], head);
+    git('symbolic-ref', refs[0], refs[1]);
+    const res = await call(client, 'git_branches', { app: APP });
+    assert.notEqual(res.isError, true, text(res));
+    assert.equal(text(res), 'origin/main\norigin/release/1.4');
+  } finally {
+    git('symbolic-ref', '--delete', refs[0]);
+    git('update-ref', '-d', refs[1]);
+    git('update-ref', '-d', refs[2]);
+  }
+});
+
+test('git_branches without remote branches asks for git_fetch', async () => {
+  const bare = path.join(tmp, 'no remotes');
+  fs.mkdirSync(bare);
+  execFileSync('git', ['init', '-q', '-b', 'main', bare]);
+  const proj = mkProject({ apps: [{ ...appCfg('app-a', 'http://127.0.0.1:1/h'), repoPath: bare }] });
+  const res = await call(await startClient(proj), 'git_branches', { app: 'app-a' });
+  assert.notEqual(res.isError, true, text(res));
+  assert.equal(text(res), 'No remote branches. Run git_fetch first.');
 });
 
 test('git_ls_tree lists files', async () => {

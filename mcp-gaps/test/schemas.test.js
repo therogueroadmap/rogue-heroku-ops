@@ -13,9 +13,9 @@ const GIT_TOOLS = ['git_fetch', 'git_log', 'git_show', 'git_ls_tree', 'git_diff'
 const parse = (tool, input) => z.object(defs[tool].inputSchema).safeParse(GIT_TOOLS.includes(tool) ? { app: 'app-test', ...input } : input);
 const SHA = 'abc1234';
 
-test('toolDefinitions exposes all 11 tools', () => {
+test('toolDefinitions exposes all 12 tools', () => {
   assert.deepEqual(Object.keys(defs).sort(), [
-    'backup_capture', 'backup_info', 'get_config', 'get_procedure', 'git_diff', 'git_fetch', 'git_log', 'git_ls_tree', 'git_show', 'health_check', 'releases_list',
+    'backup_capture', 'backup_info', 'get_config', 'get_procedure', 'git_branches', 'git_diff', 'git_fetch', 'git_log', 'git_ls_tree', 'git_show', 'health_check', 'releases_list',
   ]);
 });
 

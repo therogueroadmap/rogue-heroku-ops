@@ -50,7 +50,7 @@ const GAPS_PREFIX = 'mcp__plugin_rogue-heroku-ops_heroku-ops-gaps__';
 
 const GAPS_N0 = new ReadonlySet([
   'get_config', 'get_procedure', 'releases_list', 'backup_info', 'health_check',
-  'git_fetch', 'git_log', 'git_show', 'git_ls_tree', 'git_diff',
+  'git_fetch', 'git_branches', 'git_log', 'git_show', 'git_ls_tree', 'git_diff',
 ]);
 
 const GAPS_N1 = new ReadonlySet(['backup_capture']);
@@ -64,6 +64,7 @@ const GAPS_KEYS = Object.freeze({
   backup_capture: ['app'],
   health_check: ['app'],
   git_fetch: ['app'],
+  git_branches: ['app'],
   git_log: ['app', 'rev', 'range', 'format', 'n', 'paths'],
   git_show: ['app', 'rev', 'path', 'format'],
   git_ls_tree: ['app', 'rev', 'recursive', 'nameOnly', 'paths'],
@@ -73,7 +74,7 @@ const GAPS_KEYS = Object.freeze({
 // Gaps tools that act on a Heroku app and therefore require a configured `app`.
 const GAPS_APP_TOOLS = new Set([
   'releases_list', 'backup_info', 'backup_capture', 'health_check',
-  'git_fetch', 'git_log', 'git_show', 'git_ls_tree', 'git_diff',
+  'git_fetch', 'git_branches', 'git_log', 'git_show', 'git_ls_tree', 'git_diff',
 ]);
 
 const PROCEDURES = ['deploy', 'incident', 'routine'];

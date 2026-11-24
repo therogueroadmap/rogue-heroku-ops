@@ -26,6 +26,7 @@ tools:
   - mcp__plugin_rogue-heroku-ops_heroku-ops-gaps__backup_info
   - mcp__plugin_rogue-heroku-ops_heroku-ops-gaps__health_check
   - mcp__plugin_rogue-heroku-ops_heroku-ops-gaps__git_fetch
+  - mcp__plugin_rogue-heroku-ops_heroku-ops-gaps__git_branches
   - mcp__plugin_rogue-heroku-ops_heroku-ops-gaps__git_log
   - mcp__plugin_rogue-heroku-ops_heroku-ops-gaps__git_show
   - mcp__plugin_rogue-heroku-ops_heroku-ops-gaps__git_ls_tree

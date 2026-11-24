@@ -14,6 +14,7 @@ const HEROKU_KEYS = {
 
 const GIT_KEYS = {
   git_fetch: ['app'],
+  git_branches: ['app'],
   git_log: ['app', 'rev', 'range', 'format', 'n', 'paths'],
   git_show: ['app', 'rev', 'path', 'format'],
   git_ls_tree: ['app', 'rev', 'recursive', 'nameOnly', 'paths'],
@@ -195,6 +196,7 @@ function gitArgs(tool, input, { config, projectDir, platform = process.platform 
   switch (tool) {
     // The Git Credential Manager helper only exists on Windows.
     case 'git_fetch': return ok([...P, ...(platform === 'win32' ? ['-c', 'credential.helper=manager'] : []), 'fetch', 'origin']);
+    case 'git_branches': return ok([...P, 'for-each-ref', '--format=%(refname:short)', 'refs/remotes/origin']);
     case 'git_log': return gitLog(input, P);
     case 'git_show': return gitShow(input, P);
     case 'git_ls_tree': return gitLsTree(input, P);

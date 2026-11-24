@@ -67,6 +67,12 @@ test('git_fetch adds credential.helper=manager only on win32', () => {
   assert.deepEqual(gitApp('git_fetch', {}, { ...ctx, platform: 'win32' }).args, [...P, '-c', 'credential.helper=manager', 'fetch', 'origin']);
 });
 
+test('git_branches args', () => {
+  assert.deepEqual(gitApp('git_branches', {}, ctx), { ok: true, args: [...P, 'for-each-ref', '--format=%(refname:short)', 'refs/remotes/origin'] });
+  notOk(gitArgs('git_branches', {}, ctx));
+  notOk(gitApp('git_branches', { extra: 1 }, ctx));
+});
+
 test('GIT_PREFIX uses -C with the given dir', () => {
   assert.deepEqual(GIT_PREFIX(PROJECT), P);
 });

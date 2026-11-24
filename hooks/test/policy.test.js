@@ -80,7 +80,7 @@ test('classifyMcpTool: heroku-ops-gaps server', () => {
   assert.equal(c(T + 'ps_list').server, 'official');
   assert.equal(c('mcp__plugin_rogue-heroku-ops_heroku-ops-gapsx__releases_list').level, 'N3');
   assert.equal(c('Bash').server, null);
-  assert.equal(policy.GAPS_N0.size, 10);
+  assert.equal(policy.GAPS_N0.size, 11);
   assert.equal(policy.GAPS_N1.size, 1);
   assert.throws(() => policy.GAPS_N0.add('git_push'), TypeError);
   assert.deepEqual(policy.GAPS_KEYS.get_config, []);

@@ -42,6 +42,10 @@ function toolDefinitions(config) {
       description: 'Runs git fetch origin in the repository of the app to update the remote references.',
       inputSchema: { app },
     },
+    git_branches: {
+      description: 'Lists the remote branches (origin/*) of the repository of the app, as of the last git_fetch.',
+      inputSchema: { app },
+    },
     git_log: {
       description: 'Shows the git history of the repository of the app. Provide exactly one of rev or range (REV..REV).',
       inputSchema: {
