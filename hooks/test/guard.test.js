@@ -7,80 +7,39 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const GUARD = path.join(__dirname, '..', 'guard.js');
+const AGENT = 'rogue-heroku-ops:heroku-ops';
 const APP = 'my-app';
-// Fixture config (the plugin config location is introduced in a later task).
-const FIXTURE = {
-  apps: [APP],
-  healthUrl: 'https://my-app.herokuapp.com/actuator/health',
-  repoPath: 'C:\\Users\\dev\\project',
-  deployBranch: 'releaseCandidate',
-  postgresBin: 'C:\\Program Files\\PostgreSQL\\18\\bin',
+const T = (t) => 'mcp__plugin_rogue-heroku-ops_heroku-ops__' + t;
+const G = (t) => 'mcp__plugin_rogue-heroku-ops_heroku-ops-gaps__' + t;
+const CONFIG = {
+  apps: [{ name: APP, healthUrl: 'https://my-app.herokuapp.com/health', deployBranch: 'main' }],
   n1Mode: 'ask',
-  sqlRewrite: true,
 };
-const FIXTURE_PATH = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'guard-fixture-')), 'config.json');
-fs.writeFileSync(FIXTURE_PATH, JSON.stringify(FIXTURE));
 
-function run(input, { args = [], env = {} } = {}) {
-  const auditDir = fs.mkdtempSync(path.join(os.tmpdir(), 'guard-audit-'));
-  const r = spawnSync('node', [GUARD, ...args], {
-    input,
-    encoding: 'utf8',
-    env: { ...process.env, HEROKU_OPS_CONFIG: FIXTURE_PATH, HEROKU_OPS_AUDIT_DIR: auditDir, ...env },
-  });
-  return { ...r, auditDir };
+function mkProject(config = CONFIG) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'guard-project-'));
+  if (config !== null) {
+    fs.mkdirSync(path.join(dir, '.claude'));
+    fs.writeFileSync(path.join(dir, '.claude', 'rogue-heroku-ops.json'), typeof config === 'string' ? config : JSON.stringify(config));
+  }
+  return dir;
+}
+const PROJECT = mkProject();
+
+// project: undefined -> PROJECT; null -> CLAUDE_PROJECT_DIR unset. data: false -> CLAUDE_PLUGIN_DATA unset.
+function run(input, { project, data } = {}) {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'guard-data-'));
+  const env = { ...process.env };
+  delete env.CLAUDE_PROJECT_DIR;
+  delete env.CLAUDE_PLUGIN_DATA;
+  if (project !== null) env.CLAUDE_PROJECT_DIR = project === undefined ? PROJECT : project;
+  if (data !== false) env.CLAUDE_PLUGIN_DATA = dataDir;
+  const r = spawnSync(process.execPath, [GUARD], { input, encoding: 'utf8', env });
+  return { ...r, dataDir, auditDir: path.join(dataDir, 'audit') };
 }
 const out = (r) => JSON.parse(r.stdout).hookSpecificOutput;
-const bashPs = JSON.stringify({ tool_name: 'Bash', tool_input: { command: `heroku ps -a ${APP}` } });
-
-test('stdin not JSON -> deny, exit 0', () => {
-  const r = run('not json');
-  assert.equal(r.status, 0);
-  const o = out(r);
-  assert.equal(o.hookEventName, 'PreToolUse');
-  assert.equal(o.permissionDecision, 'deny');
-  assert.match(o.permissionDecisionReason, /guarda: error interno, se bloquea por seguridad/);
-});
-
-test('missing config file -> deny, exit 0', () => {
-  const r = run(bashPs, { env: { HEROKU_OPS_CONFIG: path.join(os.tmpdir(), 'no-such-config.json') } });
-  assert.equal(r.status, 0);
-  assert.equal(out(r).permissionDecision, 'deny');
-});
-
-test('invalid config JSON -> deny', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'guard-cfg-'));
-  const f = path.join(dir, 'c.json');
-  fs.writeFileSync(f, '{nope');
-  const r = run(bashPs, { env: { HEROKU_OPS_CONFIG: f } });
-  assert.equal(out(r).permissionDecision, 'deny');
-});
-
-test('fixture config: allowed MCP tool -> allow, and a decision line is audited', () => {
-  const r = run(JSON.stringify({ tool_name: 'mcp__heroku-ops-gaps__git_log', tool_input: { rev: 'HEAD' } }));
-  assert.equal(r.status, 0);
-  assert.equal(out(r).permissionDecision, 'allow');
-  const files = fs.readdirSync(r.auditDir);
-  assert.equal(files.length, 1);
-  const line = JSON.parse(fs.readFileSync(path.join(r.auditDir, files[0]), 'utf8').trim());
-  assert.equal(line.kind, 'decision');
-  assert.equal(line.tool, 'mcp__heroku-ops-gaps__git_log');
-  assert.equal(line.decision, 'allow');
-  assert.equal(line.level, 'N0');
-});
-
-test('fixture config: Bash is denied', () => {
-  const r = run(bashPs);
-  assert.equal(out(r).permissionDecision, 'deny');
-  assert.match(out(r).permissionDecisionReason, /Bash/);
-});
-
-test('updatedInput is returned for pg_psql', () => {
-  const r = run(JSON.stringify({ tool_name: 'mcp__heroku-ops__pg_psql', tool_input: { app: APP, command: 'SELECT 1' } }));
-  const o = out(r);
-  assert.equal(o.permissionDecision, 'allow');
-  assert.equal(o.updatedInput.command, 'BEGIN TRANSACTION READ ONLY; SELECT 1; ROLLBACK;');
-});
+const call = (tool_name, tool_input, agent_type = AGENT) => JSON.stringify({ agent_type, tool_name, tool_input });
+const bashPs = call('Bash', { command: `heroku ps -a ${APP}` });
 
 const readLine = (r) => {
   const f = fs.readdirSync(r.auditDir)[0];
@@ -89,34 +48,130 @@ const readLine = (r) => {
 };
 const sha16 = (s) => require('node:crypto').createHash('sha256').update(s).digest('hex').slice(0, 16);
 
+test('stdin not JSON -> deny, exit 0', () => {
+  const r = run('not json');
+  assert.equal(r.status, 0);
+  const o = out(r);
+  assert.equal(o.hookEventName, 'PreToolUse');
+  assert.equal(o.permissionDecision, 'deny');
+  assert.match(o.permissionDecisionReason, /guard: internal error, blocked for safety/);
+});
+
+test('guard.js end-to-end: CLAUDE_PROJECT_DIR unset -> deny JSON on stdout, exit 0', () => {
+  const r = run(call(T('ps_list'), { app: APP }), { project: null });
+  assert.equal(r.status, 0);
+  assert.equal(out(r).permissionDecision, 'deny');
+  assert.match(out(r).permissionDecisionReason, /rogue-heroku-ops:setup/);
+});
+
+test('missing config file -> deny with the setup hint, exit 0', () => {
+  const r = run(call(T('ps_list'), { app: APP }), { project: mkProject(null) });
+  assert.equal(r.status, 0);
+  assert.equal(out(r).permissionDecision, 'deny');
+  assert.match(out(r).permissionDecisionReason, /rogue-heroku-ops:setup/);
+});
+
+test('invalid config (bad JSON, unknown key, sqlRewrite) -> deny', () => {
+  for (const config of ['{nope', { ...CONFIG, sqlRewrite: true }, { ...CONFIG, extra: 1 }, { apps: [] }]) {
+    const r = run(call(T('ps_list'), { app: APP }), { project: mkProject(config) });
+    assert.equal(out(r).permissionDecision, 'deny', JSON.stringify(config));
+  }
+});
+
+test('config not ok: get_config from the agent is allowed', () => {
+  const r = run(call(G('get_config'), {}), { project: mkProject(null) });
+  assert.equal(out(r).permissionDecision, 'allow');
+});
+
+test('Read from the main session -> no output, exit 0, no audit', () => {
+  const r = run(JSON.stringify({ tool_name: 'Read', tool_input: { file_path: '/etc/hosts' } }));
+  assert.equal(r.status, 0);
+  assert.equal(r.stdout, '');
+  assert.equal(fs.existsSync(r.auditDir), false);
+});
+
+test('plugin tool from the main session -> deny with the agent hint', () => {
+  const r = run(call(T('ps_list'), { app: APP }, null));
+  assert.equal(out(r).permissionDecision, 'deny');
+  assert.equal(out(r).permissionDecisionReason, 'Use the rogue-heroku-ops:heroku-ops agent for Heroku operations.');
+});
+
+test('agent Read of .env inside the project -> deny', () => {
+  const r = run(call('Read', { file_path: path.join(PROJECT, '.env') }));
+  assert.equal(out(r).permissionDecision, 'deny');
+  const ok = run(call('Read', { file_path: path.join(PROJECT, 'pom.xml') }));
+  assert.equal(out(ok).permissionDecision, 'allow');
+});
+
+test('valid config: allowed MCP tool -> allow, and a decision line is audited', () => {
+  const r = run(call(G('git_log'), { rev: 'HEAD' }));
+  assert.equal(r.status, 0);
+  assert.equal(out(r).permissionDecision, 'allow');
+  const files = fs.readdirSync(r.auditDir);
+  assert.equal(files.length, 1);
+  assert.match(files[0], /^audit-\d{4}-\d{2}\.jsonl$/);
+  const { line } = readLine(r);
+  assert.equal(line.kind, 'decision');
+  assert.equal(line.agent_type, AGENT);
+  assert.equal(line.tool, G('git_log'));
+  assert.equal(line.decision, 'allow');
+  assert.equal(line.level, 'N0');
+});
+
+test('without CLAUDE_PLUGIN_DATA the guard still decides and writes no file', () => {
+  const r = run(call(G('git_log'), { rev: 'HEAD' }), { data: false });
+  assert.equal(r.status, 0);
+  assert.equal(out(r).permissionDecision, 'allow');
+  assert.equal(fs.readdirSync(r.dataDir).length, 0);
+});
+
+test('Bash from the agent is denied', () => {
+  const r = run(bashPs);
+  assert.equal(out(r).permissionDecision, 'deny');
+  assert.match(out(r).permissionDecisionReason, /Bash/);
+});
+
+test('updatedInput is returned for pg_psql', () => {
+  const r = run(call(T('pg_psql'), { app: APP, command: 'SELECT 1' }));
+  const o = out(r);
+  assert.equal(o.permissionDecision, 'allow');
+  assert.equal(o.updatedInput.command, 'BEGIN TRANSACTION READ ONLY; SELECT 1; ROLLBACK;');
+});
+
+test('git ref to a branch that is not a deployBranch -> deny in the guard', () => {
+  const r = run(call(G('git_log'), { range: 'origin/main..origin/secret' }));
+  assert.equal(out(r).permissionDecision, 'deny');
+  assert.match(out(r).permissionDecisionReason, /deployBranch/);
+});
+
 test('decision line of a denied MCP pg_psql keeps agent_type and a redacted input', () => {
-  const sql = "SELECT 1; DELETE FROM u WHERE email = 'secreto@x.com'";
-  const r = run(JSON.stringify({ agent_type: 'heroku-ops', tool_name: 'mcp__heroku-ops__pg_psql', tool_input: { app: APP, command: sql } }));
+  const sql = "SELECT 1; DELETE FROM u WHERE email = 'secret@x.com'";
+  const r = run(call(T('pg_psql'), { app: APP, command: sql }));
   assert.equal(out(r).permissionDecision, 'deny');
   const { raw, line } = readLine(r);
-  assert.ok(!raw.includes('secreto@x.com'), 'literal in clear in the audit log');
+  assert.ok(!raw.includes('secret@x.com'), 'literal in clear in the audit log');
   assert.equal(line.kind, 'decision');
-  assert.equal(line.agent_type, 'heroku-ops');
+  assert.equal(line.agent_type, AGENT);
   assert.equal(typeof line.input, 'string');
   assert.ok(line.input.includes("email = '?'"), line.input);
   assert.ok(line.input.includes('DELETE FROM u'), line.input);
 });
 
 test('decision line of a denied shell command holds only exe, sub, length and sha256', () => {
-  const REPO = 'git -C "C:\\Users\\dev\\project" ';
-  const psqlDeny = `$env:Path = "C:\\Program Files\\PostgreSQL\\18\\bin;" + $env:Path; heroku pg:psql -c "SELECT 1; DELETE FROM u WHERE email = 'MRK9x@x.com'" -a ${APP}`;
+  const REPO = 'git -C "/home/dev/project" ';
+  const psqlDeny = `export PATH="/usr/lib/postgresql/16/bin:$PATH"; heroku pg:psql -c "SELECT 1; DELETE FROM u WHERE email = 'MRK9x@x.com'" -a ${APP}`;
   const cases = [
     [`heroku config:set DB_PASSWORD=MRK9xValor -a ${APP}`, 'heroku', 'config:set'],
-    [`${REPO}diff -p../MRK9x src`, 'git', '[otro]'],
-    [`${REPO}diff -pO/etc/MRK9x`, 'git', '[otro]'],
-    [`${REPO}show HEAD:../MRK9x`, 'git', '[otro]'],
-    [`${REPO}diff X = "MRK9x"`, 'git', '[otro]'],
-    ['DB_PASSWORD=MRK9x heroku ps', '[otro]', 'heroku'],
-    [psqlDeny, '[otro]', '[otro]'],
+    [`${REPO}diff -p../MRK9x src`, 'git', '[other]'],
+    [`${REPO}diff -pO/etc/MRK9x`, 'git', '[other]'],
+    [`${REPO}show HEAD:../MRK9x`, 'git', '[other]'],
+    [`${REPO}diff X = "MRK9x"`, 'git', '[other]'],
+    ['DB_PASSWORD=MRK9x heroku ps', '[other]', 'heroku'],
+    [psqlDeny, 'export', '[other]'],
   ];
   for (const tool_name of ['Bash', 'PowerShell']) {
     for (const [command, exe, sub] of cases) {
-      const r = run(JSON.stringify({ agent_type: 'heroku-ops', tool_name, tool_input: { command } }));
+      const r = run(call(tool_name, { command }));
       assert.equal(out(r).permissionDecision, 'deny', command);
       const { raw, line } = readLine(r);
       assert.ok(!raw.includes('MRK9x'), `${tool_name}: denied command text in the audit log: ${raw}`);
@@ -127,14 +182,17 @@ test('decision line of a denied shell command holds only exe, sub, length and sh
   }
 });
 
-test('gaps backup_capture with n1Mode deny -> deny', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'guard-cfg-'));
-  const f = path.join(dir, 'c.json');
-  const real = FIXTURE;
-  fs.writeFileSync(f, JSON.stringify({ ...real, n1Mode: 'deny' }));
-  const r = run(JSON.stringify({ tool_name: 'mcp__heroku-ops-gaps__backup_capture', tool_input: { app: APP } }), { env: { HEROKU_OPS_CONFIG: f } });
+test('gaps backup_capture with n1Mode deny -> deny, level N1', () => {
+  const project = mkProject({ ...CONFIG, n1Mode: 'deny' });
+  const r = run(call(G('backup_capture'), { app: APP }), { project });
   assert.equal(out(r).permissionDecision, 'deny');
   assert.equal(readLine(r).line.level, 'N1');
+});
+
+test('n1Mode defaults to ask when the config omits it', () => {
+  const project = mkProject({ apps: CONFIG.apps });
+  const r = run(call(T('ps_restart'), { app: APP }), { project });
+  assert.equal(out(r).permissionDecision, 'ask');
 });
 
 test('300 000-character command: denied, bounded decision line, in Bash, PowerShell and MCP', () => {
@@ -142,10 +200,10 @@ test('300 000-character command: denied, bounded decision line, in Bash, PowerSh
   for (const [tool_name, tool_input] of [
     ['Bash', { command: big }],
     ['PowerShell', { command: big }],
-    ['mcp__heroku-ops__pg_psql', { app: APP, command: 'SELECT ' + 'x'.repeat(300000) }],
+    [T('pg_psql'), { app: APP, command: 'SELECT ' + 'x'.repeat(300000) }],
   ]) {
     const t0 = Date.now();
-    const r = run(JSON.stringify({ tool_name, tool_input }));
+    const r = run(call(tool_name, tool_input));
     assert.ok(Date.now() - t0 < 5000, `${tool_name}: guard took ${Date.now() - t0} ms`);
     assert.equal(out(r).permissionDecision, 'deny');
     const { raw, line } = readLine(r);
@@ -157,11 +215,11 @@ test('300 000-character command: denied, bounded decision line, in Bash, PowerSh
 test('in-process: evaluate + deny summary of 300 000 characters take less than 200 ms', () => {
   const { evaluate } = require('../lib/evaluate.js');
   const { summarizeDeniedCommand } = require('../lib/audit-entry.js');
-  const config = FIXTURE;
+  const configResult = { ok: true, config: CONFIG, file: null };
   const big = 'git ' + 'a=b '.repeat(75000);
-  for (const tool_name of ['Bash', 'PowerShell', 'mcp__heroku-ops__pg_psql']) {
+  for (const tool_name of ['Bash', 'PowerShell', T('pg_psql')]) {
     const t0 = process.hrtime.bigint();
-    const d = evaluate({ tool_name, tool_input: { app: APP, command: big } }, config, path.join(__dirname, '..', '..'));
+    const d = evaluate({ agent_type: AGENT, tool_name, tool_input: { app: APP, command: big } }, configResult, PROJECT);
     summarizeDeniedCommand(big);
     const ms = Number(process.hrtime.bigint() - t0) / 1e6;
     assert.equal(d.decision, 'deny');
@@ -170,52 +228,34 @@ test('in-process: evaluate + deny summary of 300 000 characters take less than 2
 });
 
 test('decision line summarizes non-shell input and redacts secret-like keys', () => {
-  const r = run(JSON.stringify({ tool_name: 'Read', tool_input: { file_path: 'C:\\x', token: 'abc' } }));
-  const f = fs.readdirSync(r.auditDir)[0];
-  const line = JSON.parse(fs.readFileSync(path.join(r.auditDir, f), 'utf8').trim());
-  assert.equal(line.agent_type, null);
-  assert.deepEqual(line.input, { file_path: 'C:\\x', token: '[redacted]' });
+  const r = run(call(T('ps_list'), { app: APP, token: 'abc' }));
+  const { line } = readLine(r);
+  assert.equal(line.agent_type, AGENT);
+  assert.deepEqual(line.input, { app: APP, token: '[redacted]' });
 });
 
-test('--only-agent: other agent_type -> empty stdout, exit 0, no audit', () => {
-  const r = run(JSON.stringify({ agent_type: 'other', tool_name: 'Bash', tool_input: { command: 'rm -rf /' } }),
-    { args: ['--only-agent', 'heroku-ops'] });
-  assert.equal(r.status, 0);
-  assert.equal(r.stdout, '');
-  assert.equal(fs.readdirSync(r.auditDir).length, 0);
-});
-
-test('--only-agent: matching agent_type is evaluated', () => {
-  const r = run(JSON.stringify({ agent_type: 'heroku-ops', tool_name: 'Bash', tool_input: { command: 'rm -rf /' } }),
-    { args: ['--only-agent', 'heroku-ops'] });
-  assert.equal(out(r).permissionDecision, 'deny');
+test('decision line of a call without agent_type records null', () => {
+  const r = run(call(T('ps_list'), { app: APP }, null));
+  assert.equal(readLine(r).line.agent_type, null);
 });
 
 test('module load failure (no lib/) -> deny, exit 0', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'guard-nolib-'));
   const copy = path.join(dir, 'guard.js');
   fs.copyFileSync(GUARD, copy);
-  const r = spawnSync('node', [copy], {
+  const r = spawnSync(process.execPath, [copy], {
     input: bashPs,
     encoding: 'utf8',
-    env: { ...process.env, HEROKU_OPS_AUDIT_DIR: path.join(dir, 'audit') },
+    env: { ...process.env, CLAUDE_PROJECT_DIR: PROJECT, CLAUDE_PLUGIN_DATA: path.join(dir, 'data') },
   });
   assert.equal(r.status, 0);
   assert.equal(out(r).permissionDecision, 'deny');
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-test('--only-agent without value or followed by a flag -> deny, exit 0', () => {
-  for (const args of [['--only-agent'], ['--only-agent', '--other']]) {
-    const r = run(bashPs, { args });
-    assert.equal(r.status, 0);
-    assert.equal(out(r).permissionDecision, 'deny');
-  }
-});
-
 test('PowerShell pg:psql is denied (no rewrite, no updatedInput)', () => {
   const command = `heroku pg:psql -c "SELECT 1" -a ${APP}`;
-  const r = run(JSON.stringify({ tool_name: 'PowerShell', tool_input: { command, timeout: 300000 } }));
+  const r = run(call('PowerShell', { command, timeout: 300000 }));
   const o = out(r);
   assert.equal(o.permissionDecision, 'deny');
   assert.equal(o.updatedInput, undefined);

@@ -9,6 +9,8 @@ const { buildAuditEntry, summarizeDeniedCommand } = require('../lib/audit-entry.
 
 const NOW = new Date('2026-11-23T10:20:30.000Z');
 const AUDIT_JS = path.join(__dirname, '..', 'audit.js');
+const T = 'mcp__plugin_rogue-heroku-ops_heroku-ops__';
+const AGENT = 'rogue-heroku-ops:heroku-ops';
 
 test('Bash pg:psql: SQL literals are redacted', () => {
   const e = buildAuditEntry({
@@ -57,10 +59,10 @@ test('summarizeDeniedCommand: bounded fields only, never the command', () => {
   const crypto = require('node:crypto');
   for (const [cmd, exe, sub] of [
     ['heroku config:set DB_PASSWORD=s3cr3tValor -a my-app', 'heroku', 'config:set'],
-    ['DB_PASSWORD=s3cr3tValor heroku ps', '[otro]', 'heroku'],
-    ['$env:X="s3cr3tValor"; heroku ps', '[otro]', 'heroku'],
-    ['git -C "C:\\repo" diff --output=s3cr3tValor', 'git', '[otro]'],
-    [`${'x'.repeat(100)} ${'y'.repeat(100)}s3cr3tValor`, '[otro]', '[otro]'],
+    ['DB_PASSWORD=s3cr3tValor heroku ps', '[other]', 'heroku'],
+    ['$env:X="s3cr3tValor"; heroku ps', '[other]', 'heroku'],
+    ['git -C "C:\\repo" diff --output=s3cr3tValor', 'git', '[other]'],
+    [`${'x'.repeat(100)} ${'y'.repeat(100)}s3cr3tValor`, '[other]', '[other]'],
   ]) {
     const s = summarizeDeniedCommand(cmd);
     assert.deepEqual(Object.keys(s).sort(), ['exe', 'length', 'sha256', 'sub']);
@@ -72,10 +74,10 @@ test('summarizeDeniedCommand: bounded fields only, never the command', () => {
   }
 });
 
-test('summarizeDeniedCommand: Heroku-looking tokens (UUID, HRKU-) are stored as [otro], no part of them', () => {
+test('summarizeDeniedCommand: Heroku-looking tokens (UUID, HRKU-) are stored as [other], no part of them', () => {
   const cases = [
-    ['echo 0f3c2a1b-9d8e-4f7a-b6c5-1234567890ab', 'echo', '[otro]', '0f3c2a1b-9d8e-4f7a-b6c5-1234567890ab'],
-    ['HRKU-AAbbccddeeffgghhiijjkkllmmnnoopp x', '[otro]', 'x', 'HRKU-AAbbccddeeffgghhiijjkkllmmnnoopp'],
+    ['echo 0f3c2a1b-9d8e-4f7a-b6c5-1234567890ab', 'echo', '[other]', '0f3c2a1b-9d8e-4f7a-b6c5-1234567890ab'],
+    ['HRKU-AAbbccddeeffgghhiijjkkllmmnnoopp x', '[other]', 'x', 'HRKU-AAbbccddeeffgghhiijjkkllmmnnoopp'],
   ];
   for (const [cmd, exe, sub, token] of cases) {
     const s = summarizeDeniedCommand(cmd);
@@ -111,7 +113,7 @@ test('allowed non-psql shell command is logged as is (closed forms, no ASSIGN re
 
 test('mcp pg_psql command is redacted', () => {
   const e = buildAuditEntry({
-    tool_name: 'mcp__heroku-ops__pg_psql',
+    tool_name: T + 'pg_psql',
     tool_input: { app: 'x', command: "SELECT * FROM u WHERE email = 'a@b.c'" },
   }, NOW);
   assert.ok(JSON.stringify(e.input).includes("'?'"));
@@ -120,7 +122,7 @@ test('mcp pg_psql command is redacted', () => {
 
 test('secret-like keys are redacted, others kept', () => {
   const e = buildAuditEntry({
-    tool_name: 'mcp__heroku-ops__get_app_info',
+    tool_name: T + 'get_app_info',
     tool_input: { app: 'x', api_key: 'abc', DB_URL: 'postgres://u:p@h/d', Password: 'p', my_token: 't', secretX: 's' },
   }, NOW);
   assert.equal(e.input.app, 'x');
@@ -157,7 +159,7 @@ test('missing fields are handled', () => {
 function runAudit(input) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'audit-test-'));
   const r = spawnSync(process.execPath, [AUDIT_JS], {
-    input, encoding: 'utf8', env: { ...process.env, HEROKU_OPS_AUDIT_DIR: path.join(dir, 'audit') },
+    input, encoding: 'utf8', env: { ...process.env, CLAUDE_PLUGIN_DATA: dir },
   });
   return { r, dir };
 }
@@ -184,32 +186,39 @@ test('audit.js exits 0 with no stdout on invalid or empty stdin', () => {
   }
 });
 
-test('audit.js --only-agent: other agent writes nothing, matching agent writes', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'audit-only-'));
-  const run = (agent_type) => spawnSync('node', [AUDIT_JS, '--only-agent', 'heroku-ops'], {
-    input: JSON.stringify({ agent_type, tool_name: 'Bash', tool_input: { command: 'heroku ps -a x' } }),
-    encoding: 'utf8',
-    env: { ...process.env, HEROKU_OPS_AUDIT_DIR: dir },
-  });
-  assert.equal(run('other').status, 0);
-  assert.equal(fs.readdirSync(dir).length, 0);
-  assert.equal(run('heroku-ops').status, 0);
-  assert.equal(fs.readdirSync(dir).length, 1);
+test('audit.js writes to CLAUDE_PLUGIN_DATA/audit/audit-YYYY-MM.jsonl with agent_type', () => {
+  const { r, dir } = runAudit(JSON.stringify({ agent_type: AGENT, tool_name: T + 'ps_list', tool_input: { app: 'my-app' } }));
+  assert.equal(r.status, 0);
+  assert.equal(r.stdout, '');
+  const month = new Date().toISOString().slice(0, 7);
+  const file = path.join(dir, 'audit', `audit-${month}.jsonl`);
+  const entry = JSON.parse(fs.readFileSync(file, 'utf8').trim());
+  assert.equal(entry.agent_type, AGENT);
+  assert.equal(entry.tool, T + 'ps_list');
+  assert.equal(entry.ts.slice(0, 7), month);
+  fs.rmSync(dir, { recursive: true, force: true });
 });
 
-test('audit.js --only-agent without value or with a flag audits everything', () => {
-  for (const args of [['--only-agent'], ['--only-agent', '--x']]) {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'audit-noval-'));
-    const r = spawnSync('node', [AUDIT_JS, ...args], {
-      input: JSON.stringify({ agent_type: 'other', tool_name: 'Bash', tool_input: { command: 'heroku ps -a x' } }),
-      encoding: 'utf8',
-      env: { ...process.env, HEROKU_OPS_AUDIT_DIR: dir },
-    });
-    assert.equal(r.status, 0);
-    assert.equal(r.stdout, '');
-    assert.equal(fs.readdirSync(dir).length, 1);
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
+test('audit.js without CLAUDE_PLUGIN_DATA -> exit 0, no output, no file written', () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'audit-nodata-'));
+  const env = { ...process.env };
+  delete env.CLAUDE_PLUGIN_DATA;
+  const r = spawnSync(process.execPath, [AUDIT_JS], {
+    input: JSON.stringify({ agent_type: AGENT, tool_name: 'Read', tool_input: { file_path: 'x' } }),
+    encoding: 'utf8', env, cwd,
+  });
+  assert.equal(r.status, 0);
+  assert.equal(r.stdout, '');
+  assert.equal(fs.readdirSync(cwd).length, 0);
+  fs.rmSync(cwd, { recursive: true, force: true });
+});
+
+test('auditFile: UTC month, null without a data dir', () => {
+  const { auditFile } = require('../lib/audit-entry.js');
+  assert.equal(auditFile({ CLAUDE_PLUGIN_DATA: path.join('d', 'x') }, '2026-12-31T23:59:59.000Z'),
+    path.join('d', 'x', 'audit', 'audit-2026-12.jsonl'));
+  assert.equal(auditFile({}, '2026-12-31T23:59:59.000Z'), null);
+  assert.equal(auditFile({ CLAUDE_PLUGIN_DATA: '' }, '2026-12-31T23:59:59.000Z'), null);
 });
 
 test('PostToolUseFailure marks error true', () => {
@@ -223,7 +232,7 @@ test('PostToolUseFailure marks error true', () => {
 
 test('root-level error field marks error true', () => {
   const e = buildAuditEntry({
-    tool_name: 'mcp__heroku-ops__ps_list',
+    tool_name: T + 'ps_list',
     tool_input: { app: 'my-app' },
     error: 'boom',
   }, NOW);

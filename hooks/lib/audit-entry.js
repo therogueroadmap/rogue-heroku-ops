@@ -2,12 +2,14 @@
 // Pure module: builds one audit log entry (spec 6.6). Never stores tool_response content.
 
 const crypto = require('node:crypto');
+const path = require('node:path');
 const { redactSql } = require('./sql.js');
+const { MCP_PREFIX } = require('./policy.js');
 
 const MAX_VALUE = 200;
 const SECRET_KEY_RE = /token|key|password|secret|url/i;
 const SHELL_TOOLS = ['Bash', 'PowerShell'];
-const PSQL_MCP_TOOL = 'mcp__heroku-ops__pg_psql';
+const PSQL_MCP_TOOL = MCP_PREFIX + 'pg_psql';
 
 // -c "..." or -c '...' (also --command), double or single quoted.
 const PSQL_C_RE = /(-c|--command)([\s=]+)("(?:[^"\\]|\\.)*"|'(?:[^']|'')*')/g;
@@ -15,10 +17,10 @@ const PSQL_C_RE = /(-c|--command)([\s=]+)("(?:[^"\\]|\\.)*"|'(?:[^']|'')*')/g;
 // Bounded fields for a denied shell command: the command itself is never stored
 // (it is free text and may hold secrets). Only exe and sub that look like a plain
 // lowercase command name (no digits, no uppercase) are kept; anything else is
-// "[otro]", so Heroku tokens (UUID, HRKU-...) and KEY=value pairs never reach the log.
+// "[other]", so Heroku tokens (UUID, HRKU-...) and KEY=value pairs never reach the log.
 const TOKEN_PREFIX = 256;
 const SAFE_TOKEN_RE = /^-{0,2}[a-z][a-z:-]{0,30}$/;
-const OTHER_TOKEN = '[otro]';
+const OTHER_TOKEN = '[other]';
 
 function safeToken(t) {
   if (typeof t !== 'string') return '';
@@ -91,4 +93,14 @@ function buildAuditEntry(hookInput, now) {
   };
 }
 
-module.exports = { buildAuditEntry, summarizeInput, summarizeDeniedCommand };
+/**
+ * Audit file for a timestamp: ${CLAUDE_PLUGIN_DATA}/audit/audit-YYYY-MM.jsonl (UTC month).
+ * Returns null when CLAUDE_PLUGIN_DATA is not set: nothing is written.
+ */
+function auditFile(env, isoTs) {
+  const dataDir = env && env.CLAUDE_PLUGIN_DATA;
+  if (typeof dataDir !== 'string' || dataDir === '') return null;
+  return path.join(dataDir, 'audit', `audit-${isoTs.slice(0, 7)}.jsonl`);
+}
+
+module.exports = { buildAuditEntry, summarizeInput, summarizeDeniedCommand, auditFile, PSQL_MCP_TOOL };

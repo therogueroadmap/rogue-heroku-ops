@@ -3,35 +3,40 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const policy = require('../lib/policy');
 
-const ROOT = 'C:\\Users\\dev\\plugin-root';
 const cfg = {
-  apps: ['my-app'],
-  healthUrl: 'https://example.invalid/health',
-  repoPath: 'C:\\repo',
-  deployBranch: 'releaseCandidate',
-  postgresBin: 'C:\\Program Files\\PostgreSQL\\18\\bin',
+  apps: [
+    { name: 'my-app', healthUrl: 'https://example.invalid/health', deployBranch: 'main' },
+    { name: 'my-app-staging', healthUrl: 'https://example.invalid/health', deployBranch: 'develop' },
+  ],
   n1Mode: 'ask',
-  sqlRewrite: true,
 };
 const APP = 'my-app';
+const T = 'mcp__plugin_rogue-heroku-ops_heroku-ops__';
+const G = 'mcp__plugin_rogue-heroku-ops_heroku-ops-gaps__';
+
+test('constants', () => {
+  assert.equal(policy.PLUGIN_AGENT, 'rogue-heroku-ops:heroku-ops');
+  assert.equal(policy.MCP_PREFIX, T);
+  assert.equal(policy.GAPS_PREFIX, G);
+});
 
 test('classifyMcpTool', () => {
   const c = policy.classifyMcpTool;
-  assert.deepEqual(c('mcp__heroku-ops__pg_info'), { level: 'N0', tool: 'pg_info', server: 'official' });
-  assert.deepEqual(c('mcp__heroku-ops__pg_psql'), { level: 'N0', tool: 'pg_psql', server: 'official' });
-  assert.deepEqual(c('mcp__heroku-ops__ps_restart'), { level: 'N1', tool: 'ps_restart', server: 'official' });
-  assert.equal(c('mcp__heroku-ops__maintenance_on').level, 'N1');
-  assert.equal(c('mcp__heroku-ops__maintenance_off').level, 'N1');
-  for (const t of ['get_app_info', 'deploy_to_heroku', 'made_up_tool']) {
-    assert.deepEqual(c('mcp__heroku-ops__' + t), { level: 'N3', tool: t, server: 'official' });
+  assert.deepEqual(c(T + 'pg_info'), { level: 'N0', tool: 'pg_info', server: 'official' });
+  assert.deepEqual(c(T + 'pg_psql'), { level: 'N0', tool: 'pg_psql', server: 'official' });
+  assert.deepEqual(c(T + 'ps_restart'), { level: 'N1', tool: 'ps_restart', server: 'official' });
+  assert.equal(c(T + 'maintenance_on').level, 'N1');
+  assert.equal(c(T + 'maintenance_off').level, 'N1');
+  for (const t of ['get_app_info', 'deploy_to_heroku', 'made_up_tool', 'get_config']) {
+    assert.deepEqual(c(T + t), { level: 'N3', tool: t, server: 'official' });
   }
+  assert.deepEqual(c('mcp__heroku-ops__pg_info'), { level: 'N3', tool: null, server: null });
   assert.deepEqual(c('mcp__heroku__pg_info'), { level: 'N3', tool: null, server: null });
   assert.deepEqual(c(undefined), { level: 'N3', tool: null, server: null });
   assert.deepEqual(c('Bash'), { level: 'N3', tool: null, server: null });
 });
 
 test('sets contain the exact tools and cannot be mutated', () => {
-  assert.equal(policy.MCP_PREFIX, 'mcp__heroku-ops__');
   assert.equal(policy.MCP_N0.size, 13);
   assert.equal(policy.MCP_N1.size, 3);
   assert.throws(() => policy.MCP_N0.add('deploy_to_heroku'), TypeError);
@@ -42,6 +47,7 @@ test('sets contain the exact tools and cannot be mutated', () => {
 test('checkMcpInput', () => {
   const k = policy.checkMcpInput;
   assert.equal(k('ps_list', { app: APP }, cfg).ok, true);
+  assert.equal(k('ps_list', { app: 'my-app-staging' }, cfg).ok, true);
   assert.equal(k('ps_list', { app: 'other-app' }, cfg).ok, false);
   assert.equal(k('ps_list', {}, cfg).ok, false);
   assert.equal(k('ps_list', undefined, cfg).ok, false);
@@ -60,16 +66,20 @@ test('checkMcpInput', () => {
 
 test('classifyMcpTool: heroku-ops-gaps server', () => {
   const c = policy.classifyMcpTool;
-  assert.deepEqual(c('mcp__heroku-ops-gaps__releases_list'), { level: 'N0', tool: 'releases_list', server: 'gaps' });
-  assert.equal(c('mcp__heroku-ops-gaps__backup_capture').level, 'N1');
-  assert.equal(c('mcp__heroku-ops-gaps__git_push').level, 'N3');
-  assert.equal(c('mcp__heroku-ops__ps_list').server, 'official');
-  assert.equal(c('mcp__heroku-ops-gapsx__releases_list').level, 'N3');
+  assert.deepEqual(c(G + 'releases_list'), { level: 'N0', tool: 'releases_list', server: 'gaps' });
+  assert.equal(c(G + 'get_config').level, 'N0');
+  assert.equal(c(G + 'get_procedure').level, 'N0');
+  assert.equal(c(G + 'backup_capture').level, 'N1');
+  assert.equal(c(G + 'git_push').level, 'N3');
+  assert.equal(c(T + 'ps_list').server, 'official');
+  assert.equal(c('mcp__plugin_rogue-heroku-ops_heroku-ops-gapsx__releases_list').level, 'N3');
   assert.equal(c('Bash').server, null);
-  assert.equal(policy.GAPS_PREFIX, 'mcp__heroku-ops-gaps__');
-  assert.equal(policy.GAPS_N0.size, 8);
+  assert.equal(policy.GAPS_N0.size, 10);
   assert.equal(policy.GAPS_N1.size, 1);
   assert.throws(() => policy.GAPS_N0.add('git_push'), TypeError);
+  assert.deepEqual(policy.GAPS_KEYS.get_config, []);
+  assert.deepEqual(policy.GAPS_KEYS.get_procedure, ['name']);
+  assert.deepEqual(policy.GAPS_KEYS.health_check, ['app']);
 });
 
 test('checkMcpInput: heroku-ops-gaps server', () => {
@@ -80,21 +90,67 @@ test('checkMcpInput: heroku-ops-gaps server', () => {
   assert.equal(k('git_log', { rev: 'HEAD', app: APP }, cfg, 'gaps').ok, false);
   assert.equal(k('git_log', { rev: 'HEAD', extra: 1 }, cfg, 'gaps').ok, false);
   assert.equal(k('git_log', { rev: 'HEAD' }, cfg, 'gaps').ok, true);
-  assert.equal(k('health_check', {}, cfg, 'gaps').ok, true);
+  assert.equal(k('health_check', { app: APP }, cfg, 'gaps').ok, true);
+  assert.equal(k('health_check', {}, cfg, 'gaps').ok, false);
+  assert.equal(k('get_config', {}, cfg, 'gaps').ok, true);
+  assert.equal(k('get_config', { app: APP }, cfg, 'gaps').ok, false);
+  assert.equal(k('get_procedure', { name: 'deploy' }, cfg, 'gaps').ok, true);
+  assert.equal(k('get_procedure', { name: 'nope' }, cfg, 'gaps').ok, false);
   assert.equal(k('backup_capture', { app: APP }, cfg, 'gaps').ok, true);
   assert.equal(k('backup_info', { app: APP, id: 'b001' }, cfg, 'gaps').ok, true);
 });
 
-test('isPathAllowed', () => {
-  const ok = (p) => policy.isPathAllowed(p, [ROOT + '\\']);
+test('checkMcpInput: origin/<x> in rev, range, from and to must be a deployBranch', () => {
+  const k = (tool, input) => policy.checkMcpInput(tool, input, cfg, 'gaps').ok;
+  assert.equal(k('git_log', { rev: 'origin/main' }), true);
+  assert.equal(k('git_log', { range: 'origin/main..origin/develop' }), true);
+  assert.equal(k('git_log', { rev: 'origin/other' }), false);
+  assert.equal(k('git_log', { range: 'origin/main..origin/other' }), false);
+  assert.equal(k('git_show', { rev: 'origin/other:f.txt' }), false);
+  assert.equal(k('git_ls_tree', { rev: 'origin/other' }), false);
+  assert.equal(k('git_diff', { from: 'origin/main', to: 'origin/other' }), false);
+  assert.equal(k('git_log', { rev: 5 }), true); // non-strings are the server's concern
+});
+
+test('isPathAllowed: win32 semantics', () => {
+  const ROOT = 'C:\\Users\\dev\\project';
+  const ok = (p) => policy.isPathAllowed(p, [ROOT + '\\'], { flavor: 'win32' });
   assert.equal(ok(ROOT + '\\procedures\\deploy.md'), true);
-  assert.equal(ok('c:/users/dev/plugin-root/rogue-heroku-ops.json'), true);
+  assert.equal(ok('c:/users/dev/project/src/a.js'), true);
   assert.equal(ok(ROOT), true);
+  assert.equal(ok('src\\a.js'), true); // relative: resolved against the first root
   assert.equal(ok('C:\\Users\\dev\\.netrc'), false);
   assert.equal(ok(ROOT + '\\..\\.credentials.json'), false);
-  assert.equal(ok('C:\\Users\\dev\\plugin-root-evil\\x'), false);
+  assert.equal(ok('C:\\Users\\dev\\project-evil\\x'), false);
   assert.equal(ok(undefined), false);
   assert.equal(ok(''), false);
-  assert.equal(policy.isPathAllowed(ROOT + '\\a', []), false);
-  assert.equal(policy.isPathAllowed('E:\\x', [ROOT]), false);
+  assert.equal(policy.isPathAllowed(ROOT + '\\a', [], { flavor: 'win32' }), false);
+  assert.equal(policy.isPathAllowed('E:\\x', [ROOT], { flavor: 'win32' }), false);
+});
+
+test('isPathAllowed: posix semantics (case-sensitive)', () => {
+  const ROOT = '/home/dev/project';
+  const ok = (p) => policy.isPathAllowed(p, [ROOT + '/'], { flavor: 'posix' });
+  assert.equal(ok(ROOT + '/src/a.js'), true);
+  assert.equal(ok(ROOT), true);
+  assert.equal(ok('src/a.js'), true);
+  assert.equal(ok('/home/dev/.netrc'), false);
+  assert.equal(ok(ROOT + '/../.credentials.json'), false);
+  assert.equal(ok('/home/dev/project-evil/x'), false);
+  assert.equal(ok('/HOME/DEV/PROJECT/x'), false);
+  assert.equal(ok(''), false);
+});
+
+test('isCredentialPath', () => {
+  const c = policy.isCredentialPath;
+  for (const p of ['.env', 'a/.env.local', 'a\\.ENV', '.netrc', 'x/server.pem', 'k.KEY', 'id_rsa', 'id_rsa.pub', '.npmrc', '.pgpass', '.env.', '.env:stream']) {
+    assert.equal(c(p), true, p);
+  }
+  for (const p of ['pom.xml', 'environment.md', 'a.key.md', 'keys', '', undefined, 5]) assert.equal(c(p), false, String(p));
+});
+
+test('patternTargetsCredentials', () => {
+  const c = policy.patternTargetsCredentials;
+  for (const p of ['**/.env*', '.env', '*.pem', '**/*.key', 'a/id_rsa*', '.NETRC', '.e[n]v', '[']) assert.equal(c(p), true, p);
+  for (const p of ['*', '**/*', '**/*.md', 'src/**/*.java', undefined, 5]) assert.equal(c(p), false, String(p));
 });
