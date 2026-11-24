@@ -206,9 +206,17 @@ const CREDENTIAL_SAMPLES = [
   'id_rsa', 'id_rsa.pub', 'id_ed25519', '.npmrc', '.pgpass', '.git-credentials', '.credentials.json',
 ];
 
+// Credential file extensions: the single list used by Read, Grep (file, literal glob, "*.ext") and Glob.
+const GREP_BLOCKED_EXTS = new Set([
+  'pem', 'key', 'env', 'p12', 'pfx', 'jks', 'tfvars', 'pgpass', 'netrc', 'keystore', 'asc', 'gpg',
+]);
+
 // NTFS aliases: alternate data stream suffix (":$DATA"), trailing dots and spaces.
 const normalizeName = (n) => n.toLowerCase().replace(/:.*$/, '').replace(/[. ]+$/, '');
-const isCredentialName = (n) => CREDENTIAL_NAME_RES.some((re) => re.test(normalizeName(n)));
+// True if any dot-separated part after the first (prod.env, a.tfvars.json, .keystore) is a credential extension.
+const hasBlockedExt = (n) => normalizeName(n).split('.').slice(1).some((e) => GREP_BLOCKED_EXTS.has(e));
+const isCredentialName = (n) =>
+  hasBlockedExt(n) || CREDENTIAL_NAME_RES.some((re) => re.test(normalizeName(n)));
 const SHORT_NAME_RE = /~\d/;
 const SHORT_NAME_PATTERN_RE = /~[\d*?[]/;
 const segmentsOf = (p) => p.split(/[\\/]/).filter((x) => x !== '' && x !== '.');
@@ -243,9 +251,6 @@ function patternTargetsCredentials(pattern) {
   return false;
 }
 
-const GREP_BLOCKED_EXTS = new Set([
-  'pem', 'key', 'env', 'p12', 'pfx', 'jks', 'tfvars', 'pgpass', 'netrc', 'keystore', 'asc', 'gpg',
-]);
 const GREP_DIR_SEG_RE = /^[A-Za-z0-9._-]+$/;
 const GREP_EXT_RE = /^\*\.([A-Za-z0-9]+)(?:\.([A-Za-z0-9]+))?$/;
 const GREP_LITERAL_RE = /^[A-Za-z0-9_-][A-Za-z0-9._-]*$/;
@@ -253,7 +258,8 @@ const GREP_LITERAL_RE = /^[A-Za-z0-9_-][A-Za-z0-9._-]*$/;
 /**
  * Allow-list for the `glob` of an agent Grep over a directory. Segments are separated by "/";
  * every segment before the last is "**" or a plain literal (no "..", no leading "."); the last is
- * "*.<ext>" (ext not a credential extension) or a plain non-credential file name. Anything else is false.
+ * "*.<ext>" (ext not a credential extension) or a plain non-credential file name (no credential extension
+ * in any part). Anything else is false.
  */
 function isSimpleGrepGlob(glob) {
   if (typeof glob !== 'string' || glob === '') return false;
@@ -265,7 +271,7 @@ function isSimpleGrepGlob(glob) {
   }
   const m = GREP_EXT_RE.exec(last);
   if (m) return ![m[1], m[2]].some((e) => e !== undefined && GREP_BLOCKED_EXTS.has(e.toLowerCase()));
-  return GREP_LITERAL_RE.test(last) && !isCredentialName(last);
+  return GREP_LITERAL_RE.test(last) && !hasBlockedExt(last) && !isCredentialName(last);
 }
 
 module.exports = {

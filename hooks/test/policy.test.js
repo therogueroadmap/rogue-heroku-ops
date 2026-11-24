@@ -146,7 +146,28 @@ test('isCredentialPath', () => {
   for (const p of ['.env', 'a/.env.local', 'a\\.ENV', '.netrc', 'x/server.pem', 'k.KEY', 'id_rsa', 'id_rsa.pub', '.npmrc', '.pgpass', '.env.', '.env:stream']) {
     assert.equal(c(p), true, p);
   }
-  for (const p of ['pom.xml', 'environment.md', 'a.key.md', 'keys', '', undefined, 5]) assert.equal(c(p), false, String(p));
+  // Any dot-separated extension in the credential set counts (a.key.md, prod.env.bak), as for Grep "*.key.md".
+  for (const p of ['pom.xml', 'environment.md', 'keys', 'key.txt', '', undefined, 5]) assert.equal(c(p), false, String(p));
+});
+
+test('isCredentialPath: credential extensions anywhere in the name (single source with the Grep blocked list)', () => {
+  const c = policy.isCredentialPath;
+  for (const p of ['prod.env', 'a.tfvars', 'a.p12', 'x.gpg', 'keystore.jks', 'a.env.', 'A.ENV', 'sub/prod.env',
+    'prod.env::$DATA', 'prod.env ', 'PROD.ENV.', 'a.tfvars.json', 'a.env.bak', '.keystore', 'debug.keystore',
+    'a.key.md', 'c.pfx', 's.asc']) {
+    assert.equal(c(p), true, p);
+  }
+});
+
+test('isSimpleGrepGlob: literal file names with a credential extension are rejected', () => {
+  const g = policy.isSimpleGrepGlob;
+  for (const glob of ['prod.env', 'a.tfvars', 'a.p12', 'x.gpg', 'keystore.jks', 'a.env.', 'A.ENV', '**/prod.env',
+    'src/a.tfvars.json', 'a.env.bak', 'debug.keystore']) {
+    assert.equal(g(glob), false, glob);
+  }
+  for (const glob of ['pom.xml', 'schema.sql', 'README.md', '**/*.d.ts', 'src/**/*.java', 'key.txt']) {
+    assert.equal(g(glob), true, glob);
+  }
 });
 
 test('patternTargetsCredentials', () => {

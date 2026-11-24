@@ -81,6 +81,29 @@ test('agent Read of .env, .env.local, .netrc, *.pem and other credential files i
   assert.equal(ev('Read', { file_path: path.join(proj, 'keys.md') }).decision, 'allow');
 });
 
+test('agent Read, Grep on a file and Grep literal glob: credential extensions anywhere in the name -> deny', () => {
+  const names = ['prod.env', 'a.tfvars', 'a.p12', 'x.gpg', 'keystore.jks', 'a.env.', 'A.ENV', 'a.tfvars.json',
+    'a.env.bak', '.keystore', 'debug.keystore'];
+  for (const name of names) fs.writeFileSync(path.join(proj, 'src', name.replace(/[. ]+$/, '')), 'SECRET=1');
+  for (const name of names) {
+    const r = ev('Read', { file_path: path.join(proj, 'src', name) });
+    assert.equal(r.decision, 'deny', 'Read ' + name);
+    assert.match(r.reason, /credential/);
+    const f = ev('Grep', { pattern: 'x', path: path.join(proj, 'src', name) });
+    assert.equal(f.decision, 'deny', 'Grep file ' + name);
+    assert.match(f.reason, /credential/);
+    assert.equal(ev('Grep', { pattern: 'x', path: proj, glob: name }).decision, 'deny', 'Grep glob ' + name);
+    assert.equal(ev('Grep', { pattern: 'x', path: proj, glob: '**/' + name }).decision, 'deny', 'Grep glob **/' + name);
+  }
+  for (const glob of ['pom.xml', 'schema.sql', 'README.md']) {
+    assert.equal(ev('Grep', { pattern: 'x', path: proj, glob }).decision, 'allow', glob);
+  }
+  for (const name of ['environment.md', 'keys.md', 'key.txt', 'a~b.txt']) {
+    assert.equal(ev('Read', { file_path: path.join(proj, name) }).decision, 'allow', name);
+  }
+  assert.equal(ev('Glob', { pattern: '**/*', path: proj }).decision, 'allow');
+});
+
 test('Grep and Glob need a path inside the project', () => {
   assert.equal(ev('Grep', { pattern: 'x' }).decision, 'deny');
   assert.equal(ev('Grep', { pattern: 'x', path: proj, glob: '*.js' }).decision, 'allow');
