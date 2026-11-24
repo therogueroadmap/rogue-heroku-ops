@@ -86,6 +86,7 @@ What the guard enforces:
 - Tool allowlist, and `app` must be one of the apps in the config.
 - SQL must be a single read-only statement and is always rewritten to run in a `READ ONLY` transaction. `pg_psql` accepts no `file` or `credential` arguments.
 - The agent reads only inside the project directory. `Grep` on a directory needs a simple glob such as `**/*.sql`. It never reads credential files (`.env*`, `*.pem`, `*.key` and similar).
+- The git tools (`git_show` with `path`, `git_diff` and `git_log` with `paths`) reject credential paths with the same rule. `git_show` without `path` (the full diff of a commit) can still show changes to those files.
 - The hook fails closed: if it errors, crashes or cannot parse its input, the call is denied. It runs `node` directly, with no shell, and sets `onFailure: "block"`, so the call is also blocked if the hook cannot start, exits with an unexpected code or reaches its 30-second timeout, on every platform (including Windows without Git Bash).
 
 Limits:

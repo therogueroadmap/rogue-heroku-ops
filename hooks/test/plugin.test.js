@@ -20,11 +20,14 @@ function parseAgent() {
   return { front: m[1], keys, tools, body: m[2], text };
 }
 
+const DEAD_TOOLS = ['pipelines_list', 'pipelines_info'];
+
 test('agent tools = Read, Grep, Glob + every N0/N1 tool with plugin prefixes, no wildcards, no Bash/PowerShell', () => {
   const { tools } = parseAgent();
   const expected = [
     'Read', 'Grep', 'Glob',
-    ...[...policy.MCP_N0, ...policy.MCP_N1].map((t) => policy.MCP_PREFIX + t),
+    // pipelines_* stay in the guard list but are denied (they need no app), so the agent does not declare them.
+    ...[...policy.MCP_N0, ...policy.MCP_N1].filter((t) => !DEAD_TOOLS.includes(t)).map((t) => policy.MCP_PREFIX + t),
     ...[...policy.GAPS_N0, ...policy.GAPS_N1].map((t) => policy.GAPS_PREFIX + t),
   ];
   assert.deepEqual([...tools].sort(), [...expected].sort());

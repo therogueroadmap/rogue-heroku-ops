@@ -2,6 +2,7 @@
 
 const { validateRev, validateRange, validatePath, validatePaths } = require('./validate');
 const { appByName, deployBranches } = require('../../lib/config');
+const { isCredentialPath } = require('../../hooks/lib/policy');
 
 const BACKUP_ID_RE = /^[abr]\d{3,6}$/;
 
@@ -89,6 +90,12 @@ function pathsTail(input) {
   return { ok: true, tail: res.value.length > 0 ? ['--', ...res.value] : [], list: res.value };
 }
 
+// git_diff and git_log show file contents, so credential paths are refused (same rule the guard applies to Read and Grep).
+function credentialPathFail(list) {
+  const bad = list.find((x) => isCredentialPath(x));
+  return bad === undefined ? null : fail(`Reading credential files through git is not allowed: ${bad}.`);
+}
+
 function herokuArgs(tool, input, config) {
   const check = checkInput(tool, input, HEROKU_KEYS);
   if (!check.ok) return check;
@@ -121,6 +128,8 @@ function gitLog(input, branches, P) {
   if (!n.ok) return n;
   const paths = pathsTail(input);
   if (!paths.ok) return paths;
+  const cred = credentialPathFail(paths.list);
+  if (cred) return cred;
   return ok([...P, 'log', '--no-ext-diff', '--no-textconv', ...fmt.flags, '-n', String(n.value), target.value, '--', ...paths.list]);
 }
 
@@ -132,6 +141,8 @@ function gitShow(input, branches, P) {
     if (has(input, 'format')) return fail('The path and format parameters cannot be combined.');
     const p = validatePath(input.path);
     if (!p.ok) return p;
+    const cred = credentialPathFail([p.value]);
+    if (cred) return cred;
     return ok([...P, 'show', '--no-textconv', `${rev.value}:${p.value}`]);
   }
   const fmt = validateFormat(input.format, ['stat', 'name-only']);
@@ -167,6 +178,8 @@ function gitDiff(input, branches, P) {
   if (!fmt.ok) return fmt;
   const paths = pathsTail(input);
   if (!paths.ok) return paths;
+  const cred = credentialPathFail(paths.list);
+  if (cred) return cred;
   return ok([...P, 'diff', '--no-ext-diff', '--no-textconv', ...fmt.flags, `${from.value}..${to.value}`, '--', ...paths.list]);
 }
 

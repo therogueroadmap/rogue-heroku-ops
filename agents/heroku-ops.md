@@ -16,8 +16,6 @@ tools:
   - mcp__plugin_rogue-heroku-ops_heroku-ops__pg_locks
   - mcp__plugin_rogue-heroku-ops_heroku-ops__pg_outliers
   - mcp__plugin_rogue-heroku-ops_heroku-ops__pg_backups
-  - mcp__plugin_rogue-heroku-ops_heroku-ops__pipelines_list
-  - mcp__plugin_rogue-heroku-ops_heroku-ops__pipelines_info
   - mcp__plugin_rogue-heroku-ops_heroku-ops__pg_psql
   - mcp__plugin_rogue-heroku-ops_heroku-ops__ps_restart
   - mcp__plugin_rogue-heroku-ops_heroku-ops__maintenance_on
