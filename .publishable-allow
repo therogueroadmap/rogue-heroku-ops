@@ -1,8 +1,8 @@
-C:\\\\Users\\\\dev  # test fixture: synthetic path C:\\Users\\dev in hooks/test/policy.test.js
-(?i)c:/users/dev  # test fixture: synthetic path c:/users/dev in hooks/test/policy.test.js
-C:/Users/\*  # test fixture: synthetic glob C:/Users/* in hooks/test/evaluate.test.js
-C:\\\\Users\\\\\*  # test fixture: synthetic glob C:\\Users\\* in hooks/test/evaluate.test.js
-(?i)/home/dev  # test fixture: synthetic path /home/dev in hooks/test/guard.test.js and hooks/test/policy.test.js
+^C:\\\\Users\\\\dev(?![\w.~-])  # test fixture: synthetic path C:\\Users\\dev in hooks/test/policy.test.js
+(?i)^c:/users/dev(?![\w.~-])  # test fixture: synthetic path c:/users/dev in hooks/test/policy.test.js
+^C:/Users/\*  # test fixture: synthetic glob C:/Users/* in hooks/test/evaluate.test.js
+^C:\\\\Users\\\\\*  # test fixture: synthetic glob C:\\Users\\* in hooks/test/evaluate.test.js
+(?i)^/home/dev(?![\w.~-])  # test fixture: synthetic path /home/dev in hooks/test/guard.test.js and hooks/test/policy.test.js
 PASSWORD=s3cr3tValor  # test fixture: synthetic DB_PASSWORD in hooks/test/audit.test.js
 PASSWORD=MRK9xValor  # test fixture: synthetic DB_PASSWORD in hooks/test/guard.test.js
 token: '\[redacted\]  # test fixture: redacted test token in hooks/test/guard.test.js
