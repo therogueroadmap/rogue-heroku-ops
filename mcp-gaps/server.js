@@ -12,7 +12,7 @@ const { loadProjectConfig } = require('../lib/config');
 
 async function main() {
   const projectDir = process.env.CLAUDE_PROJECT_DIR;
-  // The plugin env block can hand over the unexpanded literal "${CLAUDE_PLUGIN_ROOT}", so trust the
+  // Claude Code may pass no value or an unexpanded literal "${CLAUDE_PLUGIN_ROOT}", so trust the
   // variable only when it points at a real plugin root; otherwise use the root this code lives in.
   const envRoot = process.env.CLAUDE_PLUGIN_ROOT;
   const pluginRoot = envRoot && fs.existsSync(path.join(envRoot, 'procedures')) ? envRoot : path.join(__dirname, '..');

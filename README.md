@@ -112,7 +112,7 @@ Then delete `.claude/rogue-heroku-ops.json` from your projects. Remove the `perm
 
 The test suite (`npm test`) runs in CI on Linux, macOS and Windows with Node 22.
 
-Live-tested against real Heroku apps: not yet. No platform has been verified end to end with a real session, so treat the plugin as in progress.
+Live-tested against a real Heroku app on Windows 11 (Claude Code 2.1.331, `--plugin-dir`): routine check, deploy GO/NO-GO, a denied `backup_capture` confirmation, the main-session deny, the audit trail, `heroku-ops-gaps` down and a missing project config. macOS and Linux have not been tested live yet, so treat the plugin as in progress.
 
 ## Development
 
