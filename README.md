@@ -96,7 +96,7 @@ Limits:
 
 ## Audit
 
-Every decision of the guard and every result of a plugin tool call is appended to `${CLAUDE_PLUGIN_DATA}/audit/audit-YYYY-MM.jsonl` (one file per UTC month). Entries are summarized and redacted: SQL literals are replaced, tokens are hidden and denied shell commands are stored as a hash. The directory survives plugin updates. Writing the audit never blocks the agent.
+Every decision of the guard and every result of a plugin tool call is appended to `${CLAUDE_PLUGIN_DATA}/audit/audit-YYYY-MM.jsonl` (one file per UTC month). Entries are summarized and redacted: SQL literals are replaced, tokens are hidden and denied shell commands are stored as a hash. The directory survives plugin updates, but **uninstalling the plugin deletes it** unless you keep the data (see [Uninstall](#uninstall)). Writing the audit never blocks the agent.
 
 ## Uninstall
 
@@ -104,7 +104,9 @@ Every decision of the guard and every result of a plugin tool call is appended t
 /plugin uninstall rogue-heroku-ops@therogueroadmap
 ```
 
-Then delete `.claude/rogue-heroku-ops.json` from your projects and, if you want to remove the audit trail, the `${CLAUDE_PLUGIN_DATA}/audit/` directory. Remove the `permissions.deny` entries from your user `settings.json` if you added them.
+Claude Code deletes the plugin's data directory (`${CLAUDE_PLUGIN_DATA}`) on uninstall. That directory holds the audit trail (`audit/`) and the installed dependencies, so the audit trail is lost with it. To keep the data, use the CLI instead: `claude plugin uninstall rogue-heroku-ops@therogueroadmap --keep-data`. If you want to keep the audit trail before a normal uninstall, copy `${CLAUDE_PLUGIN_DATA}/audit/` somewhere else first.
+
+Then delete `.claude/rogue-heroku-ops.json` from your projects. Remove the `permissions.deny` entries from your user `settings.json` if you added them.
 
 ## Tested platforms
 
