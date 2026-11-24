@@ -202,3 +202,15 @@ test('invariants: prefix intact and no user token starts with a dash', () => {
   }
   assert.deepEqual([...fixed].filter((t) => !seen.has(t)), [], 'inert entries in fixed');
 });
+
+test('git tools reject credential paths', () => {
+  for (const path of ['config/prod.env', 'certs/server.key', 'deploy.pem']) {
+    const res = gitArgs('git_show', { rev: 'HEAD', path }, ctx);
+    notOk(res);
+    assert.match(res.reason, /credential files through git/);
+    notOk(gitArgs('git_diff', { from: 'HEAD', to: 'abc1234', paths: ['src', path] }, ctx));
+    notOk(gitArgs('git_log', { rev: 'HEAD', paths: [path] }, ctx));
+    assert.equal(gitArgs('git_ls_tree', { rev: 'HEAD', paths: [path] }, ctx).ok, true);
+  }
+  assert.equal(gitArgs('git_show', { rev: 'HEAD', path: 'src/main/App.java' }, ctx).ok, true);
+});
