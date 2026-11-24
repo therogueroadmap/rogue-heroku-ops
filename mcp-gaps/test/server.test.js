@@ -206,6 +206,13 @@ test('get_procedure falls back to the plugin dir when CLAUDE_PLUGIN_ROOT is miss
   assert.equal(text(res), fs.readFileSync(path.join(PLUGIN_ROOT, 'procedures', 'deploy.md'), 'utf8'));
 });
 
+test('get_procedure falls back to the plugin dir when CLAUDE_PLUGIN_ROOT is an unexpanded literal', async () => {
+  const c = await startClient(repo, { CLAUDE_PLUGIN_ROOT: '${CLAUDE_PLUGIN_ROOT}' });
+  const res = await call(c, 'get_procedure', { name: 'routine' });
+  assert.notEqual(res.isError, true);
+  assert.equal(text(res), fs.readFileSync(path.join(PLUGIN_ROOT, 'procedures', 'routine.md'), 'utf8'));
+});
+
 test('releases_list passes correct args, strips HEROKU_API_KEY and filters fields', async () => {
   resetFake();
   const res = await call(client, 'releases_list', { app: APP, limit: 3 });

@@ -2,6 +2,7 @@
 // heroku-ops-gaps: stdio MCP server with the tools the official Heroku MCP does not cover.
 // It starts even when the project config is missing or invalid: every tool is registered and the
 // ones that need the config answer with the problems and the setup hint instead.
+const fs = require('node:fs');
 const path = require('node:path');
 const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
 const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
@@ -11,7 +12,10 @@ const { loadProjectConfig } = require('../lib/config');
 
 async function main() {
   const projectDir = process.env.CLAUDE_PROJECT_DIR;
-  const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path.join(__dirname, '..');
+  // The plugin env block can hand over the unexpanded literal "${CLAUDE_PLUGIN_ROOT}", so trust the
+  // variable only when it points at a real plugin root; otherwise use the root this code lives in.
+  const envRoot = process.env.CLAUDE_PLUGIN_ROOT;
+  const pluginRoot = envRoot && fs.existsSync(path.join(envRoot, 'procedures')) ? envRoot : path.join(__dirname, '..');
   const loaded = loadProjectConfig(projectDir);
   if (!loaded.ok) console.error(`Project config problems:\n- ${loaded.problems.join('\n- ')}`);
   const handlers = createHandlers({
