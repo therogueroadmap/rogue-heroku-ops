@@ -3,7 +3,7 @@
     "SessionStart": [
       {
         "hooks": [
-          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/install-deps.js\"" }
+          { "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/bin/install-deps.js"] }
         ]
       }
     ],
@@ -11,7 +11,7 @@
       {
         "matcher": "^(mcp__plugin_rogue-heroku-ops_heroku-ops__.*|mcp__plugin_rogue-heroku-ops_heroku-ops-gaps__.*|Read|Grep|Glob)$",
         "hooks": [
-          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/guard.js\" || exit 2" }
+          { "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/guard.js"], "onFailure": "block", "timeout": 30 }
         ]
       }
     ],
@@ -19,7 +19,7 @@
       {
         "matcher": "^(mcp__plugin_rogue-heroku-ops_heroku-ops__.*|mcp__plugin_rogue-heroku-ops_heroku-ops-gaps__.*|Read|Grep|Glob)$",
         "hooks": [
-          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/audit.js\"" }
+          { "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/audit.js"] }
         ]
       }
     ],
@@ -27,7 +27,7 @@
       {
         "matcher": "^(mcp__plugin_rogue-heroku-ops_heroku-ops__.*|mcp__plugin_rogue-heroku-ops_heroku-ops-gaps__.*|Read|Grep|Glob)$",
         "hooks": [
-          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/audit.js\"" }
+          { "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/audit.js"] }
         ]
       }
     ]

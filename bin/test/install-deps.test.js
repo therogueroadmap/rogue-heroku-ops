@@ -34,6 +34,7 @@ test('first run: copies package files to the data dir and runs npm ci there', as
   assert.equal(calls.length, 1);
   assert.equal(calls[0].cwd, data);
   assert.ok(calls[0].cmd.args.includes('ci'));
+  assert.ok(calls[0].cmd.args.includes('--ignore-scripts'));
   assert.equal(fs.readFileSync(path.join(data, 'package.json'), 'utf8'), '{"name":"x"}');
   assert.equal(fs.readFileSync(path.join(data, 'package-lock.json'), 'utf8'), '{"lockfileVersion":3}');
 });

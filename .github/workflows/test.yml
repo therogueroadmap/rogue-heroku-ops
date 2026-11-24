@@ -1,7 +1,10 @@
 name: test
 on: [push, pull_request]
+permissions:
+  contents: read
 jobs:
   test:
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:

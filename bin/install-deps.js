@@ -14,7 +14,7 @@ const SEAL = '.install-ok';
 const REQUIRED = ['@modelcontextprotocol/sdk/server/mcp.js', 'zod'];
 
 function npmCommand(platform = process.platform) {
-  const args = ['ci', '--omit=dev', '--no-audit', '--no-fund'];
+  const args = ['ci', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'];
   if (platform === 'win32') {
     // Run npm through node directly: no npm.cmd, so no shell is needed.
     const npmCli = path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');

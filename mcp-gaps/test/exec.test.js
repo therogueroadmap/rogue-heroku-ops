@@ -145,7 +145,7 @@ test('runFile: missing or invalid timeoutMs uses the default (does not fire imme
   }
 });
 
-test('runFile: stdin cerrado', async () => {
+test('runFile: stdin is closed', async () => {
   const d = mkTmp();
   const s = writeScript(d, "process.stdin.on('data',()=>{});process.stdin.on('end',()=>console.log('eof'))");
   const r = await runFile(process.execPath, [s], { env: process.env, timeoutMs: 10000 });
@@ -153,7 +153,7 @@ test('runFile: stdin cerrado', async () => {
   assert.strictEqual(r.stdout.trim(), 'eof');
 });
 
-test('runFile: truncado', async () => {
+test('runFile: output is truncated', async () => {
   const d = mkTmp();
   const s = writeScript(d, "process.stdout.write('x'.repeat(1024*1024))");
   const r = await runFile(process.execPath, [s], { env: process.env, timeoutMs: 10000 });
@@ -161,7 +161,7 @@ test('runFile: truncado', async () => {
   assert.strictEqual(r.truncated, true);
 });
 
-test('utf8CompleteLength descarta solo una secuencia final incompleta', () => {
+test('utf8CompleteLength drops only a trailing incomplete sequence', () => {
   assert.strictEqual(utf8CompleteLength(Buffer.from('abc')), 3);
   assert.strictEqual(utf8CompleteLength(Buffer.from('añ')), 3);
   assert.strictEqual(utf8CompleteLength(Buffer.from([0x61, 0xC3])), 1);

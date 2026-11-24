@@ -24,7 +24,7 @@ Operations that change something (manual backup, dyno restart, maintenance mode 
 
 ## Requirements
 
-- Claude Code with plugin support.
+- Claude Code v2.1.295 or later (the guard hook uses `onFailure: "block"`, added in that version).
 - Node.js 20 or later.
 - [Heroku CLI](https://devcenter.heroku.com/articles/heroku-cli), logged in (`heroku login`).
 - `git`.
@@ -71,7 +71,7 @@ The config file is exactly `${CLAUDE_PROJECT_DIR}/.claude/rogue-heroku-ops.json`
 
 - `migrations` is optional; without it the agent reports migrations as "not configured".
 - `n1Mode` is `ask` (default: state-changing actions ask for confirmation) or `deny` (they are denied and the command is shown to you).
-- Unknown keys make the config invalid. Validate it with `node bin/validate-config.js <projectDir>`.
+- Unknown keys make the config invalid. Validate it with `/rogue-heroku-ops:setup`, or from a clone of this repository with `node bin/validate-config.js <projectDir>` (the path is relative to the clone).
 
 The file holds no secrets. Committing `.claude/rogue-heroku-ops.json` is your choice: commit it to share the same apps, health URLs and deploy branches with your team, or add it to `.gitignore` to keep it local.
 
@@ -86,7 +86,7 @@ What the guard enforces:
 - Tool allowlist, and `app` must be one of the apps in the config.
 - SQL must be a single read-only statement and is always rewritten to run in a `READ ONLY` transaction. `pg_psql` accepts no `file` or `credential` arguments.
 - The agent reads only inside the project directory. `Grep` on a directory needs a simple glob such as `**/*.sql`. It never reads credential files (`.env*`, `*.pem`, `*.key` and similar).
-- The hook fails closed: if it errors, crashes or cannot parse its input, the call is denied.
+- The hook fails closed: if it errors, crashes or cannot parse its input, the call is denied. It runs `node` directly, with no shell, and sets `onFailure: "block"`, so the call is also blocked if the hook cannot start, exits with an unexpected code or reaches its 30-second timeout, on every platform (including Windows without Git Bash).
 
 Limits:
 
@@ -118,6 +118,8 @@ Live-tested against real Heroku apps: not yet. No platform has been verified end
 npm ci
 npm test
 ```
+
+Running the tests needs Node 22 or later (`npm test` uses `node --test` glob patterns).
 
 To try it from a clone: `claude --plugin-dir <path-to-clone>` after `npm ci`.
 

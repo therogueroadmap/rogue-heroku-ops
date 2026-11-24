@@ -68,16 +68,34 @@ test('hooks.json PreToolUse matcher matches both prefixes and Read|Grep|Glob, no
   assert.equal(h.PostToolUseFailure[0].matcher, h.PreToolUse[0].matcher);
 });
 
-test('hooks.json PreToolUse command quotes ${CLAUDE_PLUGIN_ROOT} and fails closed', () => {
+test('hooks.json hooks run node in exec form (no shell) with the script path in args', () => {
   const h = readJson('hooks/hooks.json').hooks;
-  assert.equal(h.PreToolUse[0].hooks[0].command, 'node "${CLAUDE_PLUGIN_ROOT}/hooks/guard.js" || exit 2');
-  assert.equal(h.PostToolUse[0].hooks[0].command, 'node "${CLAUDE_PLUGIN_ROOT}/hooks/audit.js"');
-  assert.equal(h.PostToolUseFailure[0].hooks[0].command, 'node "${CLAUDE_PLUGIN_ROOT}/hooks/audit.js"');
+  const pre = h.PreToolUse[0].hooks[0];
+  assert.equal(pre.type, 'command');
+  assert.equal(pre.command, 'node');
+  assert.deepEqual(pre.args, ['${CLAUDE_PLUGIN_ROOT}/hooks/guard.js']);
+  for (const ev of ['PostToolUse', 'PostToolUseFailure']) {
+    assert.equal(h[ev][0].hooks[0].command, 'node', ev);
+    assert.deepEqual(h[ev][0].hooks[0].args, ['${CLAUDE_PLUGIN_ROOT}/hooks/audit.js'], ev);
+  }
+});
+
+test('hooks.json PreToolUse guard fails closed: onFailure "block" with a timeout', () => {
+  const h = readJson('hooks/hooks.json').hooks;
+  for (const entry of h.PreToolUse) {
+    for (const hook of entry.hooks) {
+      assert.equal(hook.onFailure, 'block', 'every PreToolUse hook must block when it fails, times out or cannot start');
+      assert.ok(Array.isArray(hook.args), 'PreToolUse hooks must use exec form (args), not a shell');
+      assert.equal(hook.timeout, 30);
+    }
+  }
 });
 
 test('hooks.json SessionStart installs dependencies into CLAUDE_PLUGIN_DATA', () => {
   const h = readJson('hooks/hooks.json').hooks;
-  assert.equal(h.SessionStart[0].hooks[0].command, 'node "${CLAUDE_PLUGIN_ROOT}/bin/install-deps.js"');
+  assert.equal(h.SessionStart[0].hooks[0].command, 'node');
+  assert.deepEqual(h.SessionStart[0].hooks[0].args, ['${CLAUDE_PLUGIN_ROOT}/bin/install-deps.js']);
+  assert.equal(h.SessionStart[0].hooks[0].onFailure, undefined);
 });
 
 test('.mcp.json: heroku-ops runs node bin/launch-official.js; heroku-ops-gaps env has CLAUDE_PROJECT_DIR, CLAUDE_PLUGIN_ROOT and NODE_PATH', () => {
