@@ -4,7 +4,7 @@ Diagnosis order. One call per response. Note the time the problem started as giv
 
 There is no console: every step is a call to an MCP tool, either the official one (`heroku-ops`) or the plugin's own (`heroku-ops-gaps`).
 
-**Setup.** Call `get_config` first (`apps[]` with `name`, `healthUrl`, `deployBranch`). Pick the target app: with a single app, use it; with several, use the one the request names, and if the request does not name one, ask which app. Below, `<app>` is the chosen `name` and `<branch>` its `deployBranch`. Always pass `app: <app>` where a tool takes the app. If `heroku-ops-gaps` does not respond, continue with the official server and mark the affected items PENDING.
+**Setup.** Call `get_config` first (`apps[]` with `name`, `healthUrl`, `deployBranch`, `repoDir`, `repoSource` and the optional `migrations`). Pick the target app: with a single app, use it; with several, use the one the request names. With several apps and no app named in the request: call only `get_config`, then stop and return (1) the question "Which app?", (2) a table with each app's `name`, repository (`repoDir` or "no repository") and `deployBranch`, and (3) how to ask again, for example "Use the heroku-ops agent for the GO/NO-GO of `<app>`". Do not pick an app yourself and do not run the procedure for every app. Below, `<app>` is the chosen `name` and `<branch>` its `deployBranch`. Always pass `app: <app>` where a tool takes the app, including every git tool. If `heroku-ops-gaps` does not respond, continue with the official server and mark the affected items PENDING.
 
 1. Health. `health_check` with `app: <app>`.
 
@@ -20,7 +20,7 @@ There is no console: every step is a call to an MCP tool, either the official on
 
 5. Recent releases against the time the problem started. `releases_list` with `app: <app>`, `limit: 10`.
 
-   If a release coincides with the start, take the detail from its description in that same output: `Deploy <sha>` for a deploy, or "Set ... config vars" / "Remove ... config vars" with the variable names (never ask for or show their values). For a deploy, look at the commits with `git_log` (`rev: origin/<branch>`, `format: oneline`, `n: 20`, or `range: <sha>..origin/<branch>`) and the changes with `git_show` (`rev: <sha>`, `format: stat`). If you need to bring in new commits, run `git_fetch` first.
+   If a release coincides with the start, take the detail from its description in that same output: `Deploy <sha>` for a deploy, or "Set ... config vars" / "Remove ... config vars" with the variable names (never ask for or show their values). For a deploy, look at the commits with `git_log` (`app: <app>`, `rev: origin/<branch>`, `format: oneline`, `n: 20`, or `range: <sha>..origin/<branch>`) and the changes with `git_show` (`app: <app>`, `rev: <sha>`, `format: stat`). If you need to bring in new commits, run `git_fetch` with `{ app: <app> }` first. If the app has no repository (`repoSource: none`), skip the commit detail and say so.
 
 ## Deliverable
 

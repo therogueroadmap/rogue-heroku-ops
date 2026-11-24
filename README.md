@@ -2,7 +2,7 @@
 
 A Claude Code plugin that gives you a Heroku operator agent behind a safety guard: deploy GO/NO-GO checks, incident triage and routine reviews of your apps. It never deploys, rolls back or restores.
 
-**Version:** 0.1.1 | **Status:** In progress | **Live-tested:** Windows (see [Tested platforms](#tested-platforms))
+**Version:** 0.2.0 | **Status:** In progress | **Live-tested:** Windows (see [Tested platforms](#tested-platforms))
 
 ## What it does
 
@@ -58,22 +58,78 @@ The config file is exactly `${CLAUDE_PROJECT_DIR}/.claude/rogue-heroku-ops.json`
 ```json
 {
   "apps": [
-    { "name": "my-app", "healthUrl": "https://my-app-1a2b3c4d5e6f.herokuapp.com/health", "deployBranch": "main" }
+    {
+      "name": "my-app",
+      "healthUrl": "https://my-app-1a2b3c4d5e6f.herokuapp.com/health",
+      "deployBranch": "main",
+      "repoPath": "/home/me/code/my-app",
+      "migrations": {
+        "repoDir": "db/migration",
+        "appliedQuery": "SELECT version, description, success FROM flyway_schema_history ORDER BY installed_rank",
+        "filePattern": "^V(\\d+(?:[._]\\d+)*)__.+\\.sql$"
+      }
+    }
   ],
-  "migrations": {
-    "repoDir": "db/migration",
-    "appliedQuery": "SELECT version, description, success FROM flyway_schema_history ORDER BY installed_rank",
-    "filePattern": "^V(\\d+(?:[._]\\d+)*)__.+\\.sql$"
-  },
   "n1Mode": "ask"
 }
 ```
 
-- `migrations` is optional; without it the agent reports migrations as "not configured".
+- `repoPath` is optional: the absolute path of the root of the app's git repository (it must contain `.git`). Without it, the app uses the project directory if that is the root of a repository; otherwise it has no repository and the git tools return an error for it. Several apps can share a `repoPath`.
+- `migrations` is optional and belongs to each app (`repoDir` is relative to that app's repository); without it the agent reports migrations as "not configured".
 - `n1Mode` is `ask` (default: state-changing actions ask for confirmation) or `deny` (they are denied and the command is shown to you).
 - Unknown keys make the config invalid. Validate it with `/rogue-heroku-ops:setup`, or from a clone of this repository with `node bin/validate-config.js <projectDir>` (the path is relative to the clone).
 
+Breaking change in 0.2.0: `migrations` moved from the root of the config into each app, and a root-level `migrations` makes the config invalid. Run `/rogue-heroku-ops:setup` to migrate a 0.1.x config. The git tools (`git_fetch`, `git_branches`, `git_log`, `git_show`, `git_ls_tree`, `git_diff`) now require `app`; the agent and the procedures already pass it.
+
 The file holds no secrets. Committing `.claude/rogue-heroku-ops.json` is your choice: commit it to share the same apps, health URLs and deploy branches with your team, or add it to `.gitignore` to keep it local.
+
+## Sessions from a hub folder
+
+You can open Claude Code in a folder that is not a repository (a hub that holds the config) and operate apps whose code lives elsewhere. Set `repoPath` on each app to the absolute path of its repository. Then:
+
+- The agent can read the hub project and the configured `repoPath` directories (use absolute paths for the repository). Credential files stay denied everywhere.
+- The git tools work on the repository of the app you pass in `app`. `git_fetch` refreshes `origin`, and `git_branches` lists the remote branches (`origin/...`) as of the last fetch. You can read any remote branch, not only the deploy branch.
+- To check a different branch in a deploy GO/NO-GO, name it in the request, for example "GO/NO-GO of `my-app` from `release/2026-12`". The agent uses it for that request only and does not change the config. To change the configured branch, run `/rogue-heroku-ops:setup` and ask to change the deploy branch of the app.
+- With several apps, name the app in the request. If you do not, the agent only reads the config and answers with the list of apps (name, repository, deploy branch) and how to ask again.
+- An app with no repository (no `repoPath` and a project that is not a repository) works for routine and incident checks, but the deploy GO/NO-GO marks the git and migration items PENDING.
+
+## Auto mode
+
+In auto mode the classifier blocks the delegation to the agent unless the read-only tools are allowed. `/rogue-heroku-ops:setup` shows this `permissions.allow` block (it does not apply it). Put it in the project's `.claude/settings.local.json`, not in your user settings, so it is not active in other sessions. The state-changing tools (`ps_restart`, `maintenance_on`, `maintenance_off`, `backup_capture`) are left out on purpose: they keep asking for confirmation.
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Agent(rogue-heroku-ops:heroku-ops)",
+      "mcp__plugin_rogue-heroku-ops_heroku-ops__list_apps",
+      "mcp__plugin_rogue-heroku-ops_heroku-ops__ps_list",
+      "mcp__plugin_rogue-heroku-ops_heroku-ops__list_addons",
+      "mcp__plugin_rogue-heroku-ops_heroku-ops__get_addon_info",
+      "mcp__plugin_rogue-heroku-ops_heroku-ops__get_app_logs",
+      "mcp__plugin_rogue-heroku-ops_heroku-ops__pg_info",
+      "mcp__plugin_rogue-heroku-ops_heroku-ops__pg_ps",
+      "mcp__plugin_rogue-heroku-ops_heroku-ops__pg_locks",
+      "mcp__plugin_rogue-heroku-ops_heroku-ops__pg_outliers",
+      "mcp__plugin_rogue-heroku-ops_heroku-ops__pg_backups",
+      "mcp__plugin_rogue-heroku-ops_heroku-ops__pipelines_list",
+      "mcp__plugin_rogue-heroku-ops_heroku-ops__pipelines_info",
+      "mcp__plugin_rogue-heroku-ops_heroku-ops__pg_psql",
+      "mcp__plugin_rogue-heroku-ops_heroku-ops-gaps__get_config",
+      "mcp__plugin_rogue-heroku-ops_heroku-ops-gaps__get_procedure",
+      "mcp__plugin_rogue-heroku-ops_heroku-ops-gaps__releases_list",
+      "mcp__plugin_rogue-heroku-ops_heroku-ops-gaps__backup_info",
+      "mcp__plugin_rogue-heroku-ops_heroku-ops-gaps__health_check",
+      "mcp__plugin_rogue-heroku-ops_heroku-ops-gaps__git_fetch",
+      "mcp__plugin_rogue-heroku-ops_heroku-ops-gaps__git_branches",
+      "mcp__plugin_rogue-heroku-ops_heroku-ops-gaps__git_log",
+      "mcp__plugin_rogue-heroku-ops_heroku-ops-gaps__git_show",
+      "mcp__plugin_rogue-heroku-ops_heroku-ops-gaps__git_ls_tree",
+      "mcp__plugin_rogue-heroku-ops_heroku-ops-gaps__git_diff"
+    ]
+  }
+}
+```
 
 ## Security model and limits
 
@@ -85,7 +141,7 @@ What the guard enforces:
 - Without a valid config, every plugin tool is denied and the message points to `/rogue-heroku-ops:setup`.
 - Tool allowlist, and `app` must be one of the apps in the config.
 - SQL must be a single read-only statement and is always rewritten to run in a `READ ONLY` transaction. `pg_psql` accepts no `file` or `credential` arguments.
-- The agent reads only inside the project directory. `Grep` on a directory needs a simple glob such as `**/*.sql`. It never reads credential files (`.env*`, `*.pem`, `*.key` and similar).
+- The agent reads only inside the project directory and the `repoPath` of the configured apps (absolute paths for the repository). `Grep` on a directory needs a simple glob such as `**/*.sql`. It never reads credential files (`.env*`, `*.pem`, `*.key` and similar).
 - The git tools (`git_show` with `path`, `git_diff` and `git_log` with `paths`) reject credential paths with the same rule. `git_show` without `path` (the full diff of a commit) and `git_diff` with a directory in `paths` can still show changes to those files.
 - The hook fails closed: if it errors, crashes or cannot parse its input, the call is denied. It runs `node` directly, with no shell, and sets `onFailure: "block"`, so the call is also blocked if the hook cannot start, exits with an unexpected code or reaches its 30-second timeout, on every platform (including Windows without Git Bash).
 
