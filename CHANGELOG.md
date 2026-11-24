@@ -10,7 +10,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - `git_show` with `path`, `git_diff` and `git_log` reject credential paths (for example `config/prod.env`, `certs/server.key`), with the same rule the guard applies to Read and Grep.
 - `pipelines_list` and `pipelines_info` are no longer in the agent's tools: the guard always denied them because they take no app.
-- The plugin icon has its own badge (a shield with a check mark) instead of a copy of the rogue-toolkit icon.
+- The plugin icon has its own badge (an h inside a hexagon) instead of a copy of the rogue-toolkit icon.
 
 ## [0.1.0] - 2026-11-24
 
