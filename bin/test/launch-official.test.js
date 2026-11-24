@@ -96,6 +96,14 @@ test('findPsqlDir: psql already on PATH -> null', () => {
   assert.equal(findPsqlDir({ env: { ProgramFiles: pf, Path: onPath }, platform: 'win32' }), null);
 });
 
+test('findPsqlDir: psql on PATH inside quoted entry -> null', () => {
+  const pf = fakePg(['18']);
+  const onPath = path.join(tmp, 'onpath-quoted');
+  fs.mkdirSync(onPath, { recursive: true });
+  fs.writeFileSync(path.join(onPath, 'psql.exe'), '');
+  assert.equal(findPsqlDir({ env: { ProgramFiles: pf, PATH: `"${onPath}"` }, platform: 'win32' }), null);
+});
+
 test('findPsqlDir: no installation -> null', () => {
   const pf = path.join(tmp, 'empty-pf');
   fs.mkdirSync(pf, { recursive: true });
@@ -118,6 +126,13 @@ test('buildOfficialSpawn win32: prepends the psql folder to the existing PATH ke
   const mixed = buildOfficialSpawn({ token: 't', env: { ProgramFiles: pf, Path: 'C:\\x' }, platform: 'win32' });
   assert.equal(mixed.env.Path, `${bin};C:\\x`);
   assert.equal(mixed.env.PATH, undefined);
+});
+
+test('buildOfficialSpawn win32: sets PATH to the detected psql folder when the env has no PATH key', () => {
+  const pf = fakePg(['18']);
+  const bin = path.join(pf, 'PostgreSQL', '18', 'bin');
+  const s = buildOfficialSpawn({ token: 't', env: { ProgramFiles: pf }, platform: 'win32' });
+  assert.equal(s.env.PATH, bin);
 });
 
 test('buildOfficialSpawn: PATH untouched when no psql is detected or platform is not win32', () => {

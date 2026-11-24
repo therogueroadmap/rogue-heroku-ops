@@ -73,7 +73,10 @@ function compareVersionKeys(a, b) {
 function findPsqlDir({ env = process.env, platform = process.platform } = {}) {
   if (platform !== 'win32') return null;
   const pathKey = envKey(env, 'PATH');
-  const dirs = String((pathKey && env[pathKey]) || '').split(';').filter(Boolean);
+  const dirs = String((pathKey && env[pathKey]) || '')
+    .split(';')
+    .map((d) => d.replace(/^"|"$/g, ''))
+    .filter(Boolean);
   if (dirs.some((d) => isFile(path.join(d, 'psql.exe')))) return null;
 
   const pfKey = envKey(env, 'ProgramFiles');
