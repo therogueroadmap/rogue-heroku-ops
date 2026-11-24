@@ -2,7 +2,7 @@
 
 A Claude Code plugin that gives you a Heroku operator agent behind a safety guard: deploy GO/NO-GO checks, incident triage and routine reviews of your apps. It never deploys, rolls back or restores.
 
-**Version:** 0.1.0 | **Status:** In progress | **Live-tested:** not yet (see [Tested platforms](#tested-platforms))
+**Version:** 0.1.0 | **Status:** In progress | **Live-tested:** Windows (see [Tested platforms](#tested-platforms))
 
 ## What it does
 
