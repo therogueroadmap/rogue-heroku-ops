@@ -1,0 +1,9 @@
+C:\\\\Users\\\\dev  # test fixture: ruta sintética C:\\Users\\dev en hooks/test/policy.test.js
+(?i)c:/users/dev  # test fixture: ruta sintética c:/users/dev en hooks/test/policy.test.js
+C:/Users/\*  # test fixture: glob sintético C:/Users/* en hooks/test/evaluate.test.js
+C:\\\\Users\\\\\*  # test fixture: glob sintético C:\\Users\\* en hooks/test/evaluate.test.js
+(?i)/home/dev  # test fixture: ruta sintética /home/dev en hooks/test/guard.test.js y hooks/test/policy.test.js
+PASSWORD=s3cr3tValor  # test fixture: DB_PASSWORD sintético en hooks/test/audit.test.js
+PASSWORD=MRK9xValor  # test fixture: DB_PASSWORD sintético en hooks/test/guard.test.js
+token: '\[redacted\]  # test fixture: token redactado de prueba en hooks/test/guard.test.js
+(?i)API_KEY: 'secret-test  # test fixture: HEROKU_API_KEY sintético en mcp-gaps/test/server.test.js
