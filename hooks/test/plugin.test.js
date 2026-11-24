@@ -159,3 +159,40 @@ test('guard.js and launch-official.js start from a plugin root with spaces in th
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 });
+
+function setupJsonBlocks() {
+  const md = fs.readFileSync(path.join(ROOT, 'skills', 'setup', 'SKILL.md'), 'utf8');
+  return [...md.matchAll(/```json\r?\n([\s\S]*?)```/g)].map((m) => JSON.parse(m[1]));
+}
+
+test('setup allow block = Agent(plugin agent) + every N0 tool, no N1', () => {
+  const blocks = setupJsonBlocks().filter((b) => b.permissions && b.permissions.allow);
+  assert.equal(blocks.length, 1);
+  const allow = blocks[0].permissions.allow;
+  assert.equal(new Set(allow).size, allow.length, 'no duplicates');
+  const expected = new Set([
+    `Agent(${policy.PLUGIN_AGENT})`,
+    ...[...policy.MCP_N0].map((t) => policy.MCP_PREFIX + t),
+    ...[...policy.GAPS_N0].map((t) => policy.GAPS_PREFIX + t),
+  ]);
+  assert.deepEqual(new Set(allow), expected);
+  for (const t of policy.MCP_N1) assert.ok(!allow.includes(policy.MCP_PREFIX + t), t);
+  for (const t of policy.GAPS_N1) assert.ok(!allow.includes(policy.GAPS_PREFIX + t), t);
+});
+
+test('setup examples are valid 0.2.0 configs', () => {
+  const { validateConfig } = require('../../lib/config.js');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'setup-ex-'));
+  try {
+    fs.mkdirSync(path.join(tmp, '.git'));
+    const configs = setupJsonBlocks().filter((b) => b.apps);
+    assert.ok(configs.length >= 1);
+    for (const cfg of configs) {
+      assert.equal(cfg.migrations, undefined, 'no migrations at the root');
+      for (const app of cfg.apps) if (app.repoPath !== undefined) app.repoPath = tmp;
+      assert.deepEqual(validateConfig(cfg), []);
+    }
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
