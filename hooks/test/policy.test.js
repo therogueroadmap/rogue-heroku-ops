@@ -56,6 +56,12 @@ test('checkMcpInput', () => {
   assert.equal(k('list_apps', { app: 'other-app' }, cfg).ok, false);
   assert.equal(k('pg_outliers', { app: APP, reset: true }, cfg).ok, false);
   assert.equal(k('pg_outliers', { app: APP, reset: false }, cfg).ok, true);
+  assert.equal(k('pg_outliers', { app: APP }, cfg).ok, true);
+  const numRes = k('pg_outliers', { app: APP, num: 5 }, cfg);
+  assert.equal(numRes.ok, false);
+  assert.ok(numRes.reason.includes('"app" only'));
+  assert.equal(k('pg_outliers', { app: APP, truncate: true }, cfg).ok, false);
+  assert.equal(k('pg_outliers', { app: APP, truncate: false }, cfg).ok, false);
   assert.equal(typeof k('ps_list', {}, cfg).reason, 'string');
   assert.equal(k('get_addon_info', { app: APP, addon: 'DATABASE' }, cfg).ok, true);
   assert.equal(k('get_addon_info', { app: APP, addon: 'HEROKU_POSTGRESQL_RED' }, cfg).ok, true);

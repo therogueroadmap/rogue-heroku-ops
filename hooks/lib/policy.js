@@ -167,6 +167,9 @@ function checkMcpInput(tool, input, config, server = 'official') {
   if (tool === 'pg_outliers' && inp.reset === true) {
     return { ok: false, reason: 'pg_outliers with reset clears statistics; not allowed.' };
   }
+  if (tool === 'pg_outliers' && (inp.num !== undefined || inp.truncate !== undefined)) {
+    return { ok: false, reason: 'pg_outliers: call it with "app" only; "num" and "truncate" make the Heroku CLI fail. If it still fails, use the pg_stat_statements query with pg_psql.' };
+  }
   return { ok: true };
 }
 
