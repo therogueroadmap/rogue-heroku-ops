@@ -104,7 +104,7 @@ Every decision of the guard and every result of a plugin tool call is appended t
 /plugin uninstall rogue-heroku-ops@therogueroadmap
 ```
 
-Claude Code deletes the plugin's data directory (`${CLAUDE_PLUGIN_DATA}`) on uninstall. That directory holds the audit trail (`audit/`) and the installed dependencies, so the audit trail is lost with it. To keep the data, use the CLI instead: `claude plugin uninstall rogue-heroku-ops@therogueroadmap --keep-data`. If you want to keep the audit trail before a normal uninstall, copy `${CLAUDE_PLUGIN_DATA}/audit/` somewhere else first.
+Claude Code deletes the plugin's data directory (`${CLAUDE_PLUGIN_DATA}`) on uninstall. That directory holds the audit trail (`audit/`) and the installed dependencies, so the audit trail is lost with it. The CLI can keep it: `claude plugin uninstall rogue-heroku-ops@therogueroadmap --keep-data`. If you want to keep the audit trail before a normal uninstall, copy `${CLAUDE_PLUGIN_DATA}/audit/` somewhere else first.
 
 Then delete `.claude/rogue-heroku-ops.json` from your projects. Remove the `permissions.deny` entries from your user `settings.json` if you added them.
 
@@ -123,7 +123,7 @@ npm test
 
 Running the tests needs Node 22 or later (`npm test` uses `node --test` glob patterns).
 
-To try it from a clone: `claude --plugin-dir <path-to-clone>` after `npm ci`.
+To try it from a clone: `claude --plugin-dir <path-to-clone>` after `npm ci`. Run `npm ci` first also when a local marketplace points at the clone: the plugin is then loaded in place, and without `node_modules` in the clone `heroku-ops-gaps` starts before the `SessionStart` install finishes and fails in the first session (reconnect it with `/mcp`). Installs from a remote marketplace are not affected: Claude Code installs the dependencies into its cached copy of the plugin.
 
 `HEROKU_OPS_TEST_HEROKU` and `HEROKU_OPS_TEST_GIT` (and the other `HEROKU_OPS_TEST_*` variables) are for tests only. They replace the Heroku CLI script and the `git` executable so tests can run without a real session. Never set them in a real environment: they change which programs the plugin runs.
 
