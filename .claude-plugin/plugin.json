@@ -1,0 +1,13 @@
+{
+  "name": "rogue-heroku-ops",
+  "description": "Heroku operations agent with a safety guard: deploy GO/NO-GO, incident triage and routine checks; never deploys.",
+  "version": "0.1.0",
+  "author": {
+    "name": "José R. Pérez Sandó",
+    "email": "contact@therogueroadmap.com"
+  },
+  "homepage": "https://github.com/therogueroadmap/rogue-heroku-ops",
+  "repository": "https://github.com/therogueroadmap/rogue-heroku-ops",
+  "license": "MIT",
+  "keywords": ["heroku", "ops", "deploy", "postgres", "claude-code"]
+}
