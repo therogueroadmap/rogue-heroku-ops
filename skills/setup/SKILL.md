@@ -21,7 +21,12 @@ Use this mode only when the request is just to change the deploy branch of an ap
 
 1. Read `<projectDir>/.claude/rogue-heroku-ops.json`. It must exist and be valid (`node "${CLAUDE_PLUGIN_ROOT}/bin/validate-config.js" "<projectDir>"` prints `OK`). If it is missing or invalid, drop quick mode and run the full setup from step 1.
 2. Pick the app (ask if there are several and the request does not name one) and the new branch.
-3. Check that the branch exists on the remote, read-only: `git -C "<repo of the app>" ls-remote --heads origin <branch>`. The repo of the app is its `repoPath`, or `<projectDir>` if the app has none. **Empty output means the branch does not exist: stop** and tell the person; change nothing.
+3. Check that the branch exists on the remote, read-only.
+   - First validate `<branch>` against the `deployBranch` grammar: segments separated by `/`, each segment `[A-Za-z0-9_][A-Za-z0-9_-]*` with internal dots allowed; no spaces, `;`, `$`, quotes or `..`. If it does not match, stop without running git and tell the person.
+   - The repo of the app is its `repoPath`. If the app has none, use `<projectDir>` only if `<projectDir>/.git` exists; otherwise stop and say the app has no repository (suggest the full setup to add `repoPath`).
+   - Run `git -C "<repo>" ls-remote --heads origin "refs/heads/<branch>"` (always quoted).
+   - If the exit code is not 0, report "could not verify the branch" with the error and stop; write nothing.
+   - The branch exists only if some output line ends exactly with `<TAB>refs/heads/<branch>`. Otherwise stop and tell the person; change nothing.
 4. Show the change as before -> after (`deployBranch`: `<old>` -> `<new>`) and ask for confirmation before writing.
 5. Write only `deployBranch` of that app (Write tool, the rest of the file untouched), then validate again with `node "${CLAUDE_PLUGIN_ROOT}/bin/validate-config.js" "<projectDir>"`. Stop there: no other step runs in quick mode.
 
@@ -86,7 +91,7 @@ Rules for the values (the validator enforces them):
 
 The git tools and the migration checks of the deploy go/no-go work on the repository of the app.
 
-- If `<projectDir>/.git` does not exist (the project is a hub, not a repo): ask for each app the absolute `repoPath` of its repository, then check it read-only with `git -C "<path>" rev-parse --show-toplevel`. The printed top-level must be the same path as the one given (it must be the repo root, not a subfolder). If it is not, show both and ask again. Several apps may share the same `repoPath`.
+- If `<projectDir>/.git` does not exist (the project is a hub, not a repo): ask for each app the absolute `repoPath` of its repository, then check it read-only with `git -C "<path>" rev-parse --show-toplevel`. The printed top-level must be the same path as the one given (it must be the repo root, not a subfolder); compare ignoring `/` vs `\` and a trailing separator, and on Windows ignoring case. If it is not, show both and ask again. Several apps may share the same `repoPath`.
 - If `<projectDir>/.git` exists: offer to leave `repoPath` out (the app uses the project repository). Add it only if the person wants a different repository.
 - **Warning to give:** an app with no `repoPath` in a project that is not a git repo is valid (routine and incident work), but its deploy go/no-go will report git and migrations as PENDING.
 - An app that has `repoPath` also lets the agent read files of that repository by absolute path (credential files stay blocked).

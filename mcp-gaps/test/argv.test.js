@@ -78,8 +78,8 @@ test('GIT_PREFIX uses -C with the given dir', () => {
 });
 
 test('git tools require app', () => {
-  for (const tool of ['git_fetch', 'git_log', 'git_show', 'git_ls_tree', 'git_diff']) {
-    const input = { git_log: { rev: 'HEAD' }, git_show: { rev: 'HEAD' }, git_ls_tree: { rev: 'HEAD' }, git_diff: { from: 'HEAD', to: 'HEAD' }, git_fetch: {} }[tool];
+  for (const tool of ['git_fetch', 'git_branches', 'git_log', 'git_show', 'git_ls_tree', 'git_diff']) {
+    const input = { git_log: { rev: 'HEAD' }, git_show: { rev: 'HEAD' }, git_ls_tree: { rev: 'HEAD' }, git_diff: { from: 'HEAD', to: 'HEAD' }, git_fetch: {}, git_branches: {} }[tool];
     notOk(gitArgs(tool, input, ctx));
     notOk(gitArgs(tool, { app: 'otra', ...input }, ctx));
     notOk(gitArgs(tool, { app: 5, ...input }, ctx));

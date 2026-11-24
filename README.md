@@ -87,7 +87,7 @@ The file holds no secrets. Committing `.claude/rogue-heroku-ops.json` is your ch
 
 You can open Claude Code in a folder that is not a repository (a hub that holds the config) and operate apps whose code lives elsewhere. Set `repoPath` on each app to the absolute path of its repository. Then:
 
-- The agent can read the hub project and the configured `repoPath` directories (use absolute paths for the repository). Credential files stay denied everywhere.
+- The agent can read the hub project and the configured `repoPath` directories (use absolute paths for the repository). Credential files and `.git` internals (such as `.git/config`) stay denied everywhere.
 - The git tools work on the repository of the app you pass in `app`. `git_fetch` refreshes `origin`, and `git_branches` lists the remote branches (`origin/...`) as of the last fetch. You can read any remote branch, not only the deploy branch.
 - To check a different branch in a deploy GO/NO-GO, name it in the request, for example "GO/NO-GO of `my-app` from `release/2026-12`". The agent uses it for that request only and does not change the config. To change the configured branch, run `/rogue-heroku-ops:setup` and ask to change the deploy branch of the app.
 - With several apps, name the app in the request. If you do not, the agent only reads the config and answers with the list of apps (name, repository, deploy branch) and how to ask again.
@@ -95,7 +95,7 @@ You can open Claude Code in a folder that is not a repository (a hub that holds 
 
 ## Auto mode
 
-In auto mode the classifier blocks the delegation to the agent unless the read-only tools are allowed. `/rogue-heroku-ops:setup` shows this `permissions.allow` block (it does not apply it). Put it in the project's `.claude/settings.local.json`, not in your user settings, so it is not active in other sessions. The state-changing tools (`ps_restart`, `maintenance_on`, `maintenance_off`, `backup_capture`) are left out on purpose: they keep asking for confirmation.
+In auto mode delegating to the agent needs `Agent(rogue-heroku-ops:heroku-ops)` in `permissions.allow`; the other entries keep the classifier from blocking the read-only calls the agent makes. `/rogue-heroku-ops:setup` shows this `permissions.allow` block (it does not apply it). Put it in the project's `.claude/settings.local.json`, not in your user settings, so it is not active in other sessions. The state-changing tools (`ps_restart`, `maintenance_on`, `maintenance_off`, `backup_capture`) are left out on purpose: they keep asking for confirmation.
 
 ```json
 {
@@ -141,7 +141,7 @@ What the guard enforces:
 - Without a valid config, every plugin tool is denied and the message points to `/rogue-heroku-ops:setup`.
 - Tool allowlist, and `app` must be one of the apps in the config.
 - SQL must be a single read-only statement and is always rewritten to run in a `READ ONLY` transaction. `pg_psql` accepts no `file` or `credential` arguments.
-- The agent reads only inside the project directory and the `repoPath` of the configured apps (absolute paths for the repository). `Grep` on a directory needs a simple glob such as `**/*.sql`. It never reads credential files (`.env*`, `*.pem`, `*.key` and similar).
+- The agent reads only inside the project directory and the `repoPath` of the configured apps (absolute paths for the repository). `Grep` on a directory needs a simple glob such as `**/*.sql`. It never reads credential files (`.env*`, `*.pem`, `*.key` and similar) and never reads `.git` internals (`.git/config` can hold a token in the remote URL); use the git tools for history.
 - The git tools (`git_show` with `path`, `git_diff` and `git_log` with `paths`) reject credential paths with the same rule. `git_show` without `path` (the full diff of a commit) and `git_diff` with a directory in `paths` can still show changes to those files.
 - The hook fails closed: if it errors, crashes or cannot parse its input, the call is denied. It runs `node` directly, with no shell, and sets `onFailure: "block"`, so the call is also blocked if the hook cannot start, exits with an unexpected code or reaches its 30-second timeout, on every platform (including Windows without Git Bash).
 

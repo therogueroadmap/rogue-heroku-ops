@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {
   PLUGIN_AGENT, MCP_PREFIX, GAPS_PREFIX, classifyMcpTool, checkMcpInput, isPathAllowed, containingRoot,
-  isCredentialPath, patternTargetsCredentials, isSimpleGrepGlob,
+  isCredentialPath, hasGitSegment, patternTargetsCredentials, isSimpleGrepGlob,
 } = require('./policy.js');
 const { readRoots } = require('../../lib/config.js');
 const { validateReadOnlySql, wrapReadOnly, unwrapReadOnly } = require('./sql.js');
@@ -92,6 +92,9 @@ function evaluatePathTool(toolName, input, projectDir, roots) {
   // Only the part below its root counts: an 8.3 segment in the root prefix (such as RUNNER~1) is not a credential.
   const root = containingRoot(p, roots, { base: projectDir }) || projectDir;
   const rel = path.relative(path.resolve(root), path.resolve(projectDir, p));
+  if (hasGitSegment(rel)) {
+    return deny(`${toolName}: reading .git internals (such as .git/config) is not allowed; use the git tools.`);
+  }
   if (isCredentialPath(rel) || patternTargetsCredentials(pattern)) {
     return deny(`${toolName}: reading .env files and credential files is not allowed.`);
   }

@@ -119,6 +119,8 @@ test('checkMcpInput: origin/<x> in rev, range, from and to must be a valid branc
   assert.equal(k('git_log', { range: 'origin/release/1.4..HEAD' }), true);
   assert.equal(k('git_log', { rev: 'origin/HEAD' }), false);
   assert.equal(k('git_log', { rev: 'origin/-x' }), false);
+  assert.equal(k('git_log', { rev: 'origin/.x' }), false);
+  assert.equal(k('git_log', { rev: 'origin/x.' }), false);
   assert.equal(k('git_log', { range: 'origin/main..origin/-x' }), false);
   assert.equal(k('git_show', { rev: 'origin/-x:f.txt' }), false);
   assert.equal(k('git_ls_tree', { rev: 'origin/-x' }), false);
@@ -174,6 +176,20 @@ test('isPathAllowed: posix semantics (case-sensitive)', () => {
   assert.equal(ok('/home/dev/project-evil/x'), false);
   assert.equal(ok('/HOME/DEV/PROJECT/x'), false);
   assert.equal(ok(''), false);
+});
+
+test('hasGitSegment and patternTargetsCredentials: .git segments', () => {
+  assert.equal(policy.hasGitSegment('.git/config'), true);
+  assert.equal(policy.hasGitSegment('a/.GIT/config'), true);
+  assert.equal(policy.hasGitSegment('src/.git'), true);
+  assert.equal(policy.hasGitSegment('src/.github/x.yml'), false);
+  assert.equal(policy.hasGitSegment('src/a.git'), false);
+  assert.equal(policy.hasGitSegment('.gitignore'), false);
+  assert.equal(policy.hasGitSegment(5), false);
+  assert.equal(policy.patternTargetsCredentials('.git/**'), true);
+  assert.equal(policy.patternTargetsCredentials('**/.GIT/config'), true);
+  assert.equal(policy.patternTargetsCredentials('**/*.js'), false);
+  assert.equal(policy.patternTargetsCredentials('**/.github/*.yml'), false);
 });
 
 test('isCredentialPath', () => {

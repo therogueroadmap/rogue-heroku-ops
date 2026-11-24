@@ -8,7 +8,7 @@ const { validateRev, validateRange, validatePath, REV_PATTERN, RANGE_PATTERN, PA
 const cfg = { apps: [{ name: 'app-test', healthUrl: 'https://x/health', deployBranch: 'release' }], n1Mode: 'ask' };
 const defs = toolDefinitions(cfg);
 const RB = ['release'];
-const GIT_TOOLS = ['git_fetch', 'git_log', 'git_show', 'git_ls_tree', 'git_diff'];
+const GIT_TOOLS = ['git_fetch', 'git_branches', 'git_log', 'git_show', 'git_ls_tree', 'git_diff'];
 // Git tools get the required app filled in unless the input already names one.
 const parse = (tool, input) => z.object(defs[tool].inputSchema).safeParse(GIT_TOOLS.includes(tool) ? { app: 'app-test', ...input } : input);
 const SHA = 'abc1234';

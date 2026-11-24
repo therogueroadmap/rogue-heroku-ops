@@ -10,6 +10,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - BREAKING: migrations moved into each app. A `migrations` block at the root of the config is now invalid; run `/rogue-heroku-ops:setup` to migrate a 0.1.x config.
 - BREAKING: git tools require app. `git_fetch`, `git_branches`, `git_log`, `git_show`, `git_ls_tree` and `git_diff` take `app` and work on that app's repository.
+- BREAKING: a session opened in a subdirectory of a repository, with no `repoPath`, no longer uses the parent repository. The git tools return "no repository" until you configure `repoPath` or open the session at the repository root.
 - When several apps are configured and the request names none, the agent and the procedures only read the config and return the list of apps and how to ask again.
 
 ### Added

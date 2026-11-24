@@ -489,10 +489,10 @@ test('tool error messages are English', async () => {
   const texts = [];
   const collect = async (c, name, args) => { const r = await call(c, name, args); assert.equal(r.isError, true, name); texts.push(text(r)); };
   await collect(client, 'releases_list', { app: 'other-app' });
-  await collect(client, 'git_show', { rev: 'origin/other' });
+  await collect(client, 'git_show', { app: APP, rev: 'origin/HEAD' });
   await collect(client, 'git_log', { app: APP });
-  await collect(client, 'git_show', { rev: 'HEAD', path: '../x' });
-  await collect(client, 'git_log', { rev: 'HEAD', n: 0 });
+  await collect(client, 'git_show', { app: APP, rev: 'HEAD', path: '../x' });
+  await collect(client, 'git_log', { app: APP, rev: 'HEAD', n: 0 });
   setMode('fail');
   await collect(client, 'backup_info', { app: APP });
   const noCfg = await startClient(mkProject());

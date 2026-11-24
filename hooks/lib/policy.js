@@ -264,12 +264,18 @@ function isCredentialPath(p) {
   return segs.length > 0 && isCredentialName(segs[segs.length - 1]);
 }
 
+/** True if any segment is ".git" (any case): git internals (.git/config) can hold a token in the remote URL. */
+function hasGitSegment(p) {
+  return typeof p === 'string' && segmentsOf(p).some((x) => x.toLowerCase() === '.git');
+}
+
 /**
  * True if a Glob pattern or Grep glob can target credential files: some segment, read as a glob,
  * matches a credential name. Segments made only of wildcards ("*", "**") are not a target.
  */
 function patternTargetsCredentials(pattern) {
   if (typeof pattern !== 'string') return false;
+  if (hasGitSegment(pattern)) return true;
   for (const seg of segmentsOf(pattern)) {
     if (/^[*?]+$/.test(seg)) continue;
     if (SHORT_NAME_PATTERN_RE.test(seg)) return true;
@@ -311,5 +317,5 @@ function isSimpleGrepGlob(glob) {
 module.exports = {
   isSimpleGrepGlob,
   PLUGIN_AGENT, MCP_PREFIX, MCP_N0, MCP_N1, GAPS_PREFIX, GAPS_N0, GAPS_N1, GAPS_KEYS,
-  classifyMcpTool, checkMcpInput, isPathAllowed, containingRoot, isCredentialPath, patternTargetsCredentials,
+  classifyMcpTool, checkMcpInput, isPathAllowed, containingRoot, isCredentialPath, hasGitSegment, patternTargetsCredentials,
 };

@@ -386,6 +386,8 @@ test('any valid remote branch allowed in refs', () => {
   for (const [tool, input] of [
     ['git_log', { app: APP, rev: 'origin/HEAD' }],
     ['git_log', { app: APP, rev: 'origin/-x' }],
+    ['git_log', { app: APP, rev: 'origin/.x' }],
+    ['git_log', { app: APP, rev: 'origin/x.' }],
     ['git_log', { app: APP, range: 'HEAD..origin/-x' }],
     ['git_show', { app: APP, rev: 'origin/-x:path/file.txt' }],
     ['git_diff', { app: APP, from: 'origin/main', to: 'origin/HEAD' }],
@@ -423,6 +425,20 @@ test('credentials inside repoPath -> deny', () => {
   assert.equal(rv('Read', { file_path: path.join(repo, '.env') }).decision, 'deny');
   assert.equal(rv('Grep', { pattern: 'x', path: repo, glob: '**/.env*' }).decision, 'deny');
   assert.equal(rv('Glob', { path: repo, pattern: '**/*.pem' }).decision, 'deny');
+});
+
+test('.git internals inside repoPath and the project -> deny (the remote URL may hold a token)', () => {
+  const r = (tool, input) => rv(tool, input);
+  assert.equal(r('Read', { file_path: path.join(repo, '.git', 'config') }).decision, 'deny');
+  assert.match(r('Read', { file_path: path.join(repo, '.git', 'config') }).reason, /\.git/);
+  assert.equal(r('Read', { file_path: path.join(proj, '.git', 'config') }).decision, 'deny');
+  assert.equal(r('Read', { file_path: path.join(repo, '.GIT', 'config') }).decision, 'deny');
+  assert.equal(r('Glob', { path: repo, pattern: '.git/**' }).decision, 'deny');
+  assert.equal(r('Glob', { path: repo, pattern: '**/.git/config' }).decision, 'deny');
+  assert.equal(r('Grep', { pattern: 'url', path: repo, glob: '**/.git/**' }).decision, 'deny');
+  assert.equal(r('Grep', { pattern: 'url', path: path.join(repo, '.git'), glob: '**/*.js' }).decision, 'deny');
+  assert.equal(r('Read', { file_path: path.join(repo, 'src', 'V1__a.sql') }).decision, 'allow');
+  assert.equal(r('Glob', { path: repo, pattern: '**/*.sql' }).decision, 'allow');
 });
 
 test('Grep inside repoPath with a simple glob -> allow', () => {
