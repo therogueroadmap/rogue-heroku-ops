@@ -26,7 +26,7 @@ Run each one separately and report present / missing with its version:
 | git | `git --version` | https://git-scm.com/downloads |
 | psql | `psql --version` | https://www.postgresql.org/download/ |
 
-Node older than 20 counts as missing. A missing tool does not abort the run, except the Heroku CLI: without it, stop after reporting (steps 2 to 4 need it). Say what each missing tool disables: `git` (release and deploy-branch checks), `psql` (database queries and migrations).
+Node older than 20 counts as missing. A missing tool does not abort the run, except the Heroku CLI and Node: without the Heroku CLI, stop after reporting (steps 2 to 4 need it); without Node (or with Node older than 20), stop after reporting too (the config validator in step 4, the hooks and the plugin servers need it). Say what each missing tool disables: `git` (release and deploy-branch checks), `psql` (database queries and migrations).
 
 ### 2. Check the Heroku session
 
@@ -36,7 +36,7 @@ If it fails or prints nothing: tell the person to run `heroku login` themselves 
 
 ### 3. Choose the apps
 
-1. Run `heroku apps --json` and extract only each `name`. Do not echo the raw JSON.
+1. Run this pipeline, which prints only the name of each app (one per line) and never the raw JSON: `heroku apps --json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{for(const a of JSON.parse(s))console.log(a.name)})"`. Use only that output (the names). Do not echo or keep the rest of the JSON.
 2. Ask which apps to allow (at least one). For each chosen app ask:
    - `healthUrl`: http or https URL of its health endpoint (for example `https://my-app.herokuapp.com/health`).
    - `deployBranch`: git branch deployed to it (for example `main` for production, `develop` for staging).
@@ -64,7 +64,7 @@ Rules for the values (the validator enforces them):
 ### 4. Write and validate the config
 
 1. Target file: `<projectDir>/.claude/rogue-heroku-ops.json` (exactly there; no search upwards). If it exists, show it and ask before overwriting.
-2. Write it as pretty-printed JSON. Example:
+2. Write it with the Write tool, not with Bash, a heredoc or `echo` (the shell can drop backslashes: `\\d` becomes `\d` and the JSON breaks). Use pretty-printed JSON. In JSON the backslashes of `filePattern` must be doubled (`\\d`, `\\.`), as in the example:
 
 ```json
 {
