@@ -1,40 +1,39 @@
 'use strict';
 
-const BRANCH_RE = /^[A-Za-z0-9_][A-Za-z0-9_-]*(\/[A-Za-z0-9_][A-Za-z0-9_-]*)*$/;
+const BRANCH_SEGMENT = String.raw`[A-Za-z0-9_][A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]+)*`;
+const BRANCH_RE = new RegExp(`^${BRANCH_SEGMENT}(?:/${BRANCH_SEGMENT})*$`);
 const SHA_RE = /^[0-9a-fA-F]{7,40}$/;
 const SEGMENT_RE = /^[A-Za-z0-9_][A-Za-z0-9_.-]*$/;
 const MAX_PATH_LENGTH = 4096;
 const MAX_PATHS = 20;
 
-const REV_MESSAGE = 'The rev parameter must be HEAD, origin/<deploy branch> or a hexadecimal SHA of 7 to 40 characters.';
-const RANGE_MESSAGE = 'The range parameter must have the form REV..REV, with each REV being HEAD, origin/<deploy branch> or a hexadecimal SHA of 7 to 40 characters.';
+const REV_MESSAGE = 'The rev parameter must be HEAD, origin/<branch> or a hexadecimal SHA of 7 to 40 characters.';
+const RANGE_MESSAGE = 'The range parameter must have the form REV..REV, with each REV being HEAD, origin/<branch> or a hexadecimal SHA of 7 to 40 characters.';
 
 const fail = (reason) => ({ ok: false, reason });
 
-function isValidBranch(branch) {
-  return typeof branch === 'string' && BRANCH_RE.test(branch);
+function isValidBranch(name) {
+  return typeof name === 'string' && name !== 'HEAD' && BRANCH_RE.test(name);
 }
 
-// branches: deploy branches of the configured apps. Exact comparison against each validated
-// branch: no regex built from config.
-function revMatches(rev, branches) {
+function revMatches(rev) {
   if (typeof rev !== 'string') return false;
   if (rev === 'HEAD' || SHA_RE.test(rev)) return true;
-  return Array.isArray(branches) && branches.some((b) => isValidBranch(b) && rev === `origin/${b}`);
+  return rev.startsWith('origin/') && isValidBranch(rev.slice('origin/'.length));
 }
 
-function validateRev(rev, branches) {
-  if (!revMatches(rev, branches)) {
+function validateRev(rev) {
+  if (!revMatches(rev)) {
     return fail(REV_MESSAGE);
   }
   return { ok: true, value: rev };
 }
 
-function validateRange(range, branches) {
+function validateRange(range) {
   const expected = RANGE_MESSAGE;
   if (typeof range !== 'string') return fail(expected);
   const parts = range.split('..');
-  if (parts.length !== 2 || !revMatches(parts[0], branches) || !revMatches(parts[1], branches)) {
+  if (parts.length !== 2 || !revMatches(parts[0]) || !revMatches(parts[1])) {
     return fail(expected);
   }
   return { ok: true, value: range, from: parts[0], to: parts[1] };
@@ -61,11 +60,11 @@ function validatePaths(ps) {
 }
 
 // Patterns for the zod schema: a first barrier, looser than the validation above.
-// argv.js stays authoritative (it compares origin/<deployBranch> exactly).
+// argv.js stays authoritative (it validates with validateRev/validateRange).
 const unanchored = (re) => re.source.replace(/^\^/, '').replace(/\$$/, '');
 const REV_SOURCE = `(?:HEAD|${unanchored(SHA_RE)}|origin/${unanchored(BRANCH_RE)})`;
 const PATH_PATTERN = new RegExp(`^${unanchored(SEGMENT_RE)}(?:/${unanchored(SEGMENT_RE)})*$`);
 const REV_PATTERN = new RegExp(`^${REV_SOURCE}$`);
 const RANGE_PATTERN = new RegExp(`^${REV_SOURCE}\\.\\.${REV_SOURCE}$`);
 
-module.exports = { BRANCH_RE, validateRev, validateRange, validatePath, validatePaths, REV_PATTERN, RANGE_PATTERN, PATH_PATTERN, REV_MESSAGE, RANGE_MESSAGE };
+module.exports = { BRANCH_RE, isValidBranch, validateRev, validateRange, validatePath, validatePaths, REV_PATTERN, RANGE_PATTERN, PATH_PATTERN, REV_MESSAGE, RANGE_MESSAGE };
