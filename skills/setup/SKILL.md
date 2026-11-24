@@ -1,0 +1,134 @@
+---
+name: setup
+description: Use when the user wants to install, configure or reconfigure the rogue-heroku-ops plugin in a project, when a rogue-heroku-ops tool was denied because the config is missing or invalid, or when they run /rogue-heroku-ops:setup.
+---
+
+# rogue-heroku-ops setup
+
+## Overview
+
+Guided, read-only setup of the plugin for the current project. It checks the tools on the PATH, checks the Heroku session, writes `.claude/rogue-heroku-ops.json` in the project root, validates it, and shows (never applies) a recommended `permissions.deny` block.
+
+Core rule: **never read or print secrets.** Never run `heroku auth:token`, `heroku config*` or anything that exposes tokens or config vars. For apps, extract names only.
+
+Run in the main session. Use Bash (or PowerShell on Windows) only for the read-only commands listed below. `projectDir` is the current project directory (the one that holds `.claude/`).
+
+## Steps
+
+### 1. Check the tools
+
+Run each one separately and report present / missing with its version:
+
+| Tool | Command | Install link if missing |
+|---|---|---|
+| Node (>= 20) | `node --version` | https://nodejs.org |
+| Heroku CLI | `heroku --version` | https://devcenter.heroku.com/articles/heroku-cli |
+| git | `git --version` | https://git-scm.com/downloads |
+| psql | `psql --version` | https://www.postgresql.org/download/ |
+
+Node older than 20 counts as missing. A missing tool does not abort the run, except the Heroku CLI: without it, stop after reporting (steps 2 to 4 need it). Say what each missing tool disables: `git` (release and deploy-branch checks), `psql` (database queries and migrations).
+
+### 2. Check the Heroku session
+
+Run `heroku auth:whoami`. Only the account email or name it prints may be shown.
+
+If it fails or prints nothing: tell the person to run `heroku login` themselves (it opens a browser), then to re-run `/rogue-heroku-ops:setup`. **Stop. Do not write any config.**
+
+### 3. Choose the apps
+
+1. Run `heroku apps --json` and extract only each `name`. Do not echo the raw JSON.
+2. Ask which apps to allow (at least one). For each chosen app ask:
+   - `healthUrl`: http or https URL of its health endpoint (for example `https://my-app.herokuapp.com/health`).
+   - `deployBranch`: git branch deployed to it (for example `main` for production, `develop` for staging).
+3. Ask whether to configure migrations. If yes, offer the Flyway preset below and let the person adjust any field. If no, omit `migrations` (the agent reports migrations as "not configured").
+4. Ask `n1Mode`: `ask` (default; state-changing actions ask for confirmation) or `deny` (they are denied and the exact command is shown to the person).
+
+Flyway preset (the `migrations` block):
+
+```json
+{
+  "repoDir": "db/migration",
+  "appliedQuery": "SELECT version, description, success FROM flyway_schema_history ORDER BY installed_rank",
+  "filePattern": "^V(\\d+(?:[._]\\d+)*)__.+\\.sql$"
+}
+```
+
+Rules for the values (the validator enforces them):
+- `name`: `^[a-z][a-z0-9-]{1,29}$`.
+- `healthUrl`: http or https.
+- `repoDir`: safe relative path inside the project (no absolute path, no `..`).
+- `appliedQuery`: read-only SQL only.
+- `filePattern`: a valid regex.
+- Allowed keys only: root `apps`, `migrations`, `n1Mode`; app `name`, `healthUrl`, `deployBranch`; migrations `repoDir`, `appliedQuery`, `filePattern`. Any other key (for example `sqlRewrite`) makes the config invalid.
+
+### 4. Write and validate the config
+
+1. Target file: `<projectDir>/.claude/rogue-heroku-ops.json` (exactly there; no search upwards). If it exists, show it and ask before overwriting.
+2. Write it as pretty-printed JSON. Example:
+
+```json
+{
+  "apps": [
+    { "name": "my-app", "healthUrl": "https://my-app.herokuapp.com/health", "deployBranch": "main" }
+  ],
+  "migrations": {
+    "repoDir": "db/migration",
+    "appliedQuery": "SELECT version, description, success FROM flyway_schema_history ORDER BY installed_rank",
+    "filePattern": "^V(\\d+(?:[._]\\d+)*)__.+\\.sql$"
+  },
+  "n1Mode": "ask"
+}
+```
+
+3. Validate: `node "${CLAUDE_PLUGIN_ROOT}/bin/validate-config.js" "<projectDir>"`.
+   - `OK <file>` (exit 0): continue.
+   - `INVALID <file>` plus one problem per line (exit 1): show the problems, fix the file with the person, and validate again. Do not continue while it is invalid.
+4. Tell the person the file holds no secrets and that committing it or not is their choice.
+
+### 5. Recommend a second barrier (show, do not apply)
+
+Show this block for the person to add to their **user** `settings.json` under `permissions.deny`. Do not edit any settings file. Rules in user settings also apply inside subagents and in every project.
+
+```json
+{
+  "permissions": {
+    "deny": [
+      "Bash(heroku config*)",
+      "Bash(heroku auth:token*)",
+      "Bash(heroku rollback*)",
+      "Bash(heroku pg:backups:restore*)",
+      "Bash(heroku run*)",
+      "Bash(heroku pg:backups:url*)",
+      "Bash(heroku apps:destroy*)",
+      "Bash(heroku addons:destroy*)",
+      "PowerShell(heroku config*)",
+      "PowerShell(heroku auth:token*)",
+      "PowerShell(heroku rollback*)",
+      "PowerShell(heroku pg:backups:restore*)",
+      "PowerShell(heroku run*)",
+      "PowerShell(heroku pg:backups:url*)",
+      "PowerShell(heroku apps:destroy*)",
+      "PowerShell(heroku addons:destroy*)"
+    ]
+  }
+}
+```
+
+Explain that these block the dangerous CLI commands even if the plugin guard is bypassed. Recommend also using a dedicated Heroku user for `heroku login`.
+
+### 6. How to use the agent
+
+Tell the person:
+- Ask for any Heroku operation on the configured apps and delegate it to the agent `rogue-heroku-ops:heroku-ops`, for example: "Use the heroku-ops agent to run the routine check on my-app."
+- The agent reads the config and procedures itself (deploy go/no-go, incident, routine). It never deploys, rolls back or restores.
+- With several apps, name the app in the request; otherwise the agent asks.
+- If a plugin tool is denied for a missing or invalid config, re-run `/rogue-heroku-ops:setup`.
+- A restart may be needed so the session picks up the new config.
+
+## Common mistakes
+
+- Running `heroku auth:token`, `heroku config` or `heroku apps` without `--json` and echoing all of it. Only names and the account identity may be shown.
+- Writing the config when there is no session or validation failed.
+- Adding `sqlRewrite` or any unknown key: the config becomes invalid.
+- Applying the `permissions.deny` block instead of showing it.
+- Writing the file outside `<projectDir>/.claude/`.
