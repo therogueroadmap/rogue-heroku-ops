@@ -8,7 +8,7 @@ const {
   resolveHerokuCommand, buildChildEnv, runFile, HEROKU_TIMEOUT_MS, GIT_TIMEOUT_MS,
 } = require('./exec');
 const { PROCEDURE_NAMES } = require('./schemas');
-const { loadProjectConfig } = require('../../lib/config');
+const { loadProjectConfig, repoDirFor } = require('../../lib/config');
 
 const HEALTH_TIMEOUT_MS = 10000;
 const HEALTH_BODY_MAX = 2048;
@@ -138,7 +138,14 @@ function createHandlers({ projectDir, pluginRoot, env, gitExe = 'git', herokuOve
     }
   });
 
-  const getConfig = withConfig(async (_input, config) => textResult(JSON.stringify(config, null, 2)));
+  // The loaded config is frozen: copy before adding the effective repository of each app.
+  const getConfig = withConfig(async (_input, config) => {
+    const apps = config.apps.map((app) => {
+      const repo = repoDirFor(config, app.name, projectDir);
+      return { ...app, repoDir: repo.ok ? repo.dir : null, repoSource: repo.ok ? repo.source : 'none' };
+    });
+    return textResult(JSON.stringify({ ...config, apps }, null, 2));
+  });
 
   // The path is built only from the PROCEDURE_NAMES enum, never from free text.
   const getProcedure = async (input) => {

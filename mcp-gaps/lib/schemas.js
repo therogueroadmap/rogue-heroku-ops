@@ -10,7 +10,7 @@ const PROCEDURE_NAMES = ['deploy', 'incident', 'routine'];
 function toolDefinitions(config) {
   const appNames = config ? config.apps.map((a) => a.name) : null;
   const app = (appNames ? z.enum(appNames) : z.string().min(1)).describe('Configured Heroku app name.');
-  const rev = z.string().max(100).regex(REV_PATTERN, REV_MESSAGE).describe('HEAD, origin/<deploy branch> or a hexadecimal SHA of 7 to 40 characters.');
+  const rev = z.string().max(100).regex(REV_PATTERN, REV_MESSAGE).describe('HEAD, origin/<branch> or a hexadecimal SHA of 7 to 40 characters.');
   const paths = z.array(z.string().max(4096).regex(PATH_PATTERN, PATH_MESSAGE)).max(20).optional().describe('Relative paths inside the repository (at most 20).');
 
   return {
@@ -39,12 +39,13 @@ function toolDefinitions(config) {
       inputSchema: { app },
     },
     git_fetch: {
-      description: 'Runs git fetch origin in the project repository to update the remote references.',
-      inputSchema: {},
+      description: 'Runs git fetch origin in the repository of the app to update the remote references.',
+      inputSchema: { app },
     },
     git_log: {
-      description: 'Shows the git history of the project repository. Provide exactly one of rev or range (REV..REV).',
+      description: 'Shows the git history of the repository of the app. Provide exactly one of rev or range (REV..REV).',
       inputSchema: {
+        app,
         rev: rev.optional(),
         range: z.string().max(200).regex(RANGE_PATTERN, RANGE_MESSAGE).optional().describe('Range REV..REV, with each REV as in the rev parameter.'),
         format: z.enum(['oneline', 'stat', 'name-only']).optional(),
@@ -53,16 +54,16 @@ function toolDefinitions(config) {
       },
     },
     git_show: {
-      description: 'Shows a commit or, if path is given, the content of a file at that revision.',
-      inputSchema: { rev, path: z.string().max(4096).regex(PATH_PATTERN, PATH_MESSAGE).optional().describe('Relative path of the file.'), format: z.enum(['stat', 'name-only']).optional() },
+      description: 'Shows a commit or, if path is given, the content of a file at that revision, in the repository of the app.',
+      inputSchema: { app, rev, path: z.string().max(4096).regex(PATH_PATTERN, PATH_MESSAGE).optional().describe('Relative path of the file.'), format: z.enum(['stat', 'name-only']).optional() },
     },
     git_ls_tree: {
-      description: 'Lists the repository file tree at a revision.',
-      inputSchema: { rev, recursive: z.boolean().optional(), nameOnly: z.boolean().optional(), paths },
+      description: 'Lists the file tree of the repository of the app at a revision.',
+      inputSchema: { app, rev, recursive: z.boolean().optional(), nameOnly: z.boolean().optional(), paths },
     },
     git_diff: {
-      description: 'Shows the differences between two revisions of the project repository.',
-      inputSchema: { from: rev, to: rev, format: z.enum(['stat', 'name-only']).optional(), paths },
+      description: 'Shows the differences between two revisions of the repository of the app.',
+      inputSchema: { app, from: rev, to: rev, format: z.enum(['stat', 'name-only']).optional(), paths },
     },
   };
 }

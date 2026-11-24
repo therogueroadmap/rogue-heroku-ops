@@ -153,8 +153,8 @@ test('invalid config: every tool except get_config/get_procedure returns isError
   const c = await startClient(mkProject({ apps: [], extra: true }));
   const cases = [
     ['releases_list', { app: 'whatever' }], ['backup_info', { app: 'whatever' }], ['backup_capture', { app: 'whatever' }],
-    ['health_check', { app: 'whatever' }], ['git_fetch', {}], ['git_log', { rev: 'HEAD' }],
-    ['git_show', { rev: 'HEAD' }], ['git_ls_tree', { rev: 'HEAD' }], ['git_diff', { from: 'HEAD', to: 'HEAD' }],
+    ['health_check', { app: 'whatever' }], ['git_fetch', { app: 'whatever' }], ['git_log', { app: 'whatever', rev: 'HEAD' }],
+    ['git_show', { app: 'whatever', rev: 'HEAD' }], ['git_ls_tree', { app: 'whatever', rev: 'HEAD' }], ['git_diff', { app: 'whatever', from: 'HEAD', to: 'HEAD' }],
   ];
   for (const [name, args] of cases) {
     const res = await call(c, name, args);
@@ -185,6 +185,21 @@ test('get_config returns the validated config as JSON', async () => {
   const cfg = JSON.parse(text(res));
   assert.equal(cfg.apps[0].name, APP);
   assert.equal(cfg.n1Mode, 'ask');
+});
+
+test('get_config includes repoDir and repoSource per app', async () => {
+  const repoA = path.join(tmp, 'cfg repo a');
+  fs.mkdirSync(path.join(repoA, '.git'), { recursive: true });
+  const proj = mkProject({ apps: [appCfg('app-a', 'http://127.0.0.1:1/h'), { ...appCfg('app-b', 'http://127.0.0.1:1/h'), repoPath: repoA }] });
+  const c = await startClient(proj);
+  const cfg = JSON.parse(text(await call(c, 'get_config')));
+  assert.deepEqual([cfg.apps[0].repoDir, cfg.apps[0].repoSource], [null, 'none']);
+  assert.deepEqual([cfg.apps[1].repoDir, cfg.apps[1].repoSource], [repoA, 'repoPath']);
+  fs.mkdirSync(path.join(proj, '.git'));
+  const c2 = await startClient(proj);
+  const cfg2 = JSON.parse(text(await call(c2, 'get_config')));
+  assert.deepEqual([cfg2.apps[0].repoDir, cfg2.apps[0].repoSource], [proj, 'project']);
+  assert.equal(cfg2.apps[0].name, 'app-a');
 });
 
 test('get_procedure returns procedures/routine.md text; rejects name "../x" via schema', async () => {
@@ -275,7 +290,7 @@ test('server rejects an app outside the config even when the schema accepts any 
 });
 
 test('git_fetch with new refs confirms success and lists what was updated', async () => {
-  const res = await call(client, 'git_fetch');
+  const res = await call(client, 'git_fetch', { app: APP });
   assert.notEqual(res.isError, true);
   assert.match(text(res), /^git fetch origin completed\./);
   assert.match(text(res), /origin\/main/);
@@ -283,62 +298,75 @@ test('git_fetch with new refs confirms success and lists what was updated', asyn
 });
 
 test('git_fetch with nothing new says so explicitly', async () => {
-  await call(client, 'git_fetch');
-  const res = await call(client, 'git_fetch');
+  await call(client, 'git_fetch', { app: APP });
+  const res = await call(client, 'git_fetch', { app: APP });
   assert.notEqual(res.isError, true);
   assert.equal(text(res), 'git fetch origin completed. No new references.');
 });
 
-test('git runs with -C CLAUDE_PROJECT_DIR (path with spaces)', async () => {
+test('git runs with -C of the project when the app has no repoPath (path with spaces)', async () => {
   assert.match(repo, / /);
   assert.notEqual(path.resolve(process.cwd()), path.resolve(repo));
-  const res = await call(client, 'git_log', { rev: 'HEAD', format: 'oneline', n: 5 });
+  const res = await call(client, 'git_log', { app: APP, rev: 'HEAD', format: 'oneline', n: 5 });
   assert.notEqual(res.isError, true);
   assert.match(text(res), /second commit/);
 });
 
 test('git_show returns file content', async () => {
-  const res = await call(client, 'git_show', { rev: 'HEAD', path: 'src/V1__a.sql' });
+  const res = await call(client, 'git_show', { app: APP, rev: 'HEAD', path: 'src/V1__a.sql' });
   assert.notEqual(res.isError, true);
   assert.match(text(res), /create table a/);
 });
 
 test('git_show with path traversal is an error', async () => {
-  assert.equal((await call(client, 'git_show', { rev: 'HEAD', path: '../x' })).isError, true);
+  assert.equal((await call(client, 'git_show', { app: APP, rev: 'HEAD', path: '../x' })).isError, true);
 });
 
-test('git rev origin/<other branch> is rejected by the server', async () => {
-  const res = await call(client, 'git_show', { rev: 'origin/other' });
+test('git rev origin/HEAD is rejected by the server', async () => {
+  const res = await call(client, 'git_show', { app: APP, rev: 'origin/HEAD' });
   assert.equal(res.isError, true);
   assert.match(text(res), /rev parameter must be/);
 });
 
-test('git accepts origin/<deployBranch of any configured app>', async () => {
-  git('update-ref', 'refs/remotes/origin/develop', 'HEAD');
-  const cfgFile = path.join(repo, '.claude', 'rogue-heroku-ops.json');
-  const saved = fs.readFileSync(cfgFile, 'utf8');
-  writeConfig(repo, { apps: [appCfg('app-a', 'http://127.0.0.1:1/h', 'main'), appCfg('app-b', 'http://127.0.0.1:1/h', 'develop')] });
+test('git accepts origin/<any valid branch>, not only deploy branches', async () => {
+  git('update-ref', 'refs/remotes/origin/feature/x', 'HEAD');
   try {
-    const c = await startClient(repo);
-    const res = await call(c, 'git_log', { rev: 'origin/develop', format: 'oneline', n: 1 });
+    const res = await call(client, 'git_log', { app: APP, rev: 'origin/feature/x', format: 'oneline', n: 1 });
     assert.notEqual(res.isError, true, text(res));
     assert.match(text(res), /second commit/);
-    assert.equal((await call(c, 'git_log', { rev: 'origin/feature', n: 1 })).isError, true);
   } finally {
-    fs.writeFileSync(cfgFile, saved);
-    git('update-ref', '-d', 'refs/remotes/origin/develop');
+    git('update-ref', '-d', 'refs/remotes/origin/feature/x');
   }
 });
 
+test('git runs in the repoPath of the app named in the call', async () => {
+  const other = path.join(tmp, 'other repo');
+  fs.mkdirSync(other);
+  execFileSync('git', ['init', '-q', '-b', 'main', other]);
+  execFileSync('git', ['-C', other, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--allow-empty', '-m', 'other repo commit']);
+  const proj = mkProject({ apps: [appCfg('app-a', 'http://127.0.0.1:1/h'), { ...appCfg('app-b', 'http://127.0.0.1:1/h'), repoPath: other }] });
+  fs.mkdirSync(path.join(proj, '.git'));
+  const c = await startClient(proj);
+  const b = await call(c, 'git_log', { app: 'app-b', rev: 'HEAD', format: 'oneline', n: 1 });
+  assert.notEqual(b.isError, true, text(b));
+  assert.match(text(b), /other repo commit/);
+  const bare = mkProject({ apps: [appCfg('app-a', 'http://127.0.0.1:1/h')] });
+  const c2 = await startClient(bare);
+  const none = await call(c2, 'git_log', { app: 'app-a', rev: 'HEAD', n: 1 });
+  assert.equal(none.isError, true);
+  assert.match(text(none), /App app-a has no repository/);
+  assert.equal((await call(c2, 'git_fetch', { app: 'zzz' })).isError, true);
+});
+
 test('git_ls_tree lists files', async () => {
-  const res = await call(client, 'git_ls_tree', { rev: 'HEAD', recursive: true, nameOnly: true });
+  const res = await call(client, 'git_ls_tree', { app: APP, rev: 'HEAD', recursive: true, nameOnly: true });
   assert.notEqual(res.isError, true);
   assert.match(text(res), /src\/V1__a\.sql/);
 });
 
 test('git_diff between two commits', async () => {
   const sha1 = git('rev-parse', 'HEAD~1').trim();
-  const res = await call(client, 'git_diff', { from: sha1, to: 'HEAD', format: 'name-only' });
+  const res = await call(client, 'git_diff', { app: APP, from: sha1, to: 'HEAD', format: 'name-only' });
   assert.notEqual(res.isError, true);
   assert.match(text(res), /README\.md/);
 });
@@ -420,7 +448,7 @@ test('without the Heroku CLI: Heroku tools fail, git and health keep working', a
     const r1 = await call(c, 'backup_info', { app: APP });
     assert.equal(r1.isError, true);
     assert.match(text(r1), /Heroku CLI not found/);
-    const r2 = await call(c, 'git_log', { rev: 'HEAD', n: 1 });
+    const r2 = await call(c, 'git_log', { app: APP, rev: 'HEAD', n: 1 });
     assert.notEqual(r2.isError, true, text(r2));
     const r3 = await call(c, 'health_check', { app: APP });
     assert.notEqual(r3.isError, true);
@@ -435,13 +463,13 @@ test('tool error messages are English', async () => {
   const collect = async (c, name, args) => { const r = await call(c, name, args); assert.equal(r.isError, true, name); texts.push(text(r)); };
   await collect(client, 'releases_list', { app: 'other-app' });
   await collect(client, 'git_show', { rev: 'origin/other' });
-  await collect(client, 'git_log', {});
+  await collect(client, 'git_log', { app: APP });
   await collect(client, 'git_show', { rev: 'HEAD', path: '../x' });
   await collect(client, 'git_log', { rev: 'HEAD', n: 0 });
   setMode('fail');
   await collect(client, 'backup_info', { app: APP });
   const noCfg = await startClient(mkProject());
-  await collect(noCfg, 'git_fetch', {});
+  await collect(noCfg, 'git_fetch', { app: APP });
   await collect(noCfg, 'get_config', {});
   for (const t of texts) assert.doesNotMatch(t, SPANISH_MARKERS, t);
 });
