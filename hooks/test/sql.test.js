@@ -17,6 +17,7 @@ const OK = [
   'SELECT 1 /* a /* nested */ still */',
   "SELECT 'x' FROM t WHERE created_at > now()",
   'SELECT query, calls, total_exec_time FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 3',
+  'SELECT query, calls, total_exec_time FROM pg_stat_statements WHERE userid = (SELECT oid FROM pg_roles WHERE rolname = current_user) ORDER BY total_exec_time DESC LIMIT 3',
 ];
 
 const NOT_OK = [

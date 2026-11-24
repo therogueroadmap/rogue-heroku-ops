@@ -62,7 +62,7 @@ async function readBodyCapped(res, maxChars) {
   return out.slice(0, maxChars);
 }
 
-// projectDir: CLAUDE_PROJECT_DIR. pluginRoot: CLAUDE_PLUGIN_ROOT (procedures live under it).
+// projectDir: CLAUDE_PROJECT_DIR. pluginRoot: the plugin root resolved by server.js (procedures live under it).
 // The config is loaded on every call: a missing or invalid one never yields a partial config,
 // and a fix made by /rogue-heroku-ops:setup takes effect without restarting the server.
 function createHandlers({ projectDir, pluginRoot, env, gitExe = 'git', herokuOverride, platform = process.platform }) {

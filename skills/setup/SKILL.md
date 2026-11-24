@@ -49,8 +49,8 @@ Base URL of an app (read-only; run it once per chosen app):
 
 1. Run `heroku apps:info --app <name> --json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).app.web_url))"`. It prints only `app.web_url` (the real default domain, with a trailing slash). Do not echo the rest of the JSON.
 2. If the app may have a custom domain, run `heroku domains --app <name> --json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{for(const d of JSON.parse(s))console.log(d.hostname,d.kind)})"` and offer the `custom` hostnames as an alternative base (`https://<hostname>`). The default is `web_url`.
-3. Join the chosen base and the path without a double slash (for example `web_url` + `health`).
-4. Before writing it, offer to check the URL with a GET that expects a 2xx: `node -e "fetch(process.argv[1]).then(r=>console.log(r.status))" "<healthUrl>"`. If it is not 2xx (404, 401, 503), show the status and ask the person to correct the path or base. Never write a URL that was not checked, unless the person insists.
+3. Remove any trailing slash from the base and append the path, which starts with `/` (for example `https://my-app-1a2b3c4d5e6f.herokuapp.com` + `/actuator/health`).
+4. Before writing it, check the URL with a GET that expects a 2xx: `node -e "fetch(process.argv[1],{signal:AbortSignal.timeout(10000)}).then(r=>console.log(r.status),e=>console.log('error',e.name))" "<healthUrl>"`. If it prints a status other than 2xx (404, 401, 503) or `error`, show it and ask the person to correct the path or base. Skip the check only if the person declines it.
 
 Flyway preset (the `migrations` block):
 

@@ -168,7 +168,7 @@ function checkMcpInput(tool, input, config, server = 'official') {
     return { ok: false, reason: 'pg_outliers with reset clears statistics; not allowed.' };
   }
   if (tool === 'pg_outliers' && (inp.num !== undefined || inp.truncate !== undefined)) {
-    return { ok: false, reason: 'pg_outliers: call it with "app" only; "num" and "truncate" make the Heroku CLI fail. If it still fails, use the pg_stat_statements query with pg_psql.' };
+    return { ok: false, reason: 'pg_outliers: call it with "app" only; "num" and "truncate" make the Heroku CLI fail. If it still fails, use pg_psql with: SELECT query, calls, total_exec_time FROM pg_stat_statements WHERE userid = (SELECT oid FROM pg_roles WHERE rolname = current_user) ORDER BY total_exec_time DESC LIMIT 3' };
   }
   return { ok: true };
 }

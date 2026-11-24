@@ -45,7 +45,7 @@ Then, in the project whose apps you want to operate, run:
 /rogue-heroku-ops:setup
 ```
 
-The setup skill checks the tools on your `PATH`, checks your Heroku session (`heroku auth:whoami`), asks which apps to allow (health URL and deploy branch for each), writes `.claude/rogue-heroku-ops.json`, validates it and shows a recommended `permissions.deny` block (it does not apply it). Then ask Claude for a Heroku operation and it delegates to the agent, for example: "Use the heroku-ops agent to run the routine check on my-app."
+The setup skill checks the tools on your `PATH`, checks your Heroku session (`heroku auth:whoami`), asks which apps to allow (deploy branch and health path for each; the base URL comes from the app's `web_url` and the health URL is checked before it is written), writes `.claude/rogue-heroku-ops.json`, validates it and shows a recommended `permissions.deny` block (it does not apply it). Then ask Claude for a Heroku operation and it delegates to the agent, for example: "Use the heroku-ops agent to run the routine check on my-app."
 
 ### Dependencies
 
@@ -123,7 +123,7 @@ npm test
 
 Running the tests needs Node 22 or later (`npm test` uses `node --test` glob patterns).
 
-To try it from a clone: `claude --plugin-dir <path-to-clone>` after `npm ci`. Run `npm ci` first also when a local marketplace points at the clone: the plugin is then loaded in place, and without `node_modules` in the clone `heroku-ops-gaps` starts before the `SessionStart` install finishes and fails in the first session (reconnect it with `/mcp`). Installs from a remote marketplace are not affected: Claude Code installs the dependencies into its cached copy of the plugin.
+To try it from a clone: `claude --plugin-dir <path-to-clone>` after `npm ci`. Run `npm ci` first also when a local marketplace points at the clone: the plugin is then loaded in place, and without `node_modules` in the clone `heroku-ops-gaps` starts before the `SessionStart` install finishes and fails in the first session (reconnect it from `/mcp` or start a new session). Installs from a remote marketplace are not affected: Claude Code installs the dependencies into its cached copy of the plugin.
 
 `HEROKU_OPS_TEST_HEROKU` and `HEROKU_OPS_TEST_GIT` (and the other `HEROKU_OPS_TEST_*` variables) are for tests only. They replace the Heroku CLI script and the `git` executable so tests can run without a real session. Never set them in a real environment: they change which programs the plugin runs.
 

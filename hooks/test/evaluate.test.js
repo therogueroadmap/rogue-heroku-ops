@@ -413,3 +413,9 @@ test('garbage hook input -> deny', () => {
   assert.equal(evaluate({}, okCfg, proj).decision, 'deny');
   assert.equal(evaluate({ tool_name: 5 }, okCfg, proj).decision, 'deny');
 });
+
+test('pg_outliers with truncate from the plugin agent -> deny with the "app" only reason', () => {
+  const d = ev(T('pg_outliers'), { app: APP, truncate: true });
+  assert.equal(d.decision, 'deny');
+  assert.ok(d.reason.includes('"app" only'), d.reason);
+});

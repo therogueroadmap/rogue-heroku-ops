@@ -98,7 +98,7 @@ test('hooks.json SessionStart installs dependencies into CLAUDE_PLUGIN_DATA', ()
   assert.equal(h.SessionStart[0].hooks[0].onFailure, undefined);
 });
 
-test('.mcp.json: heroku-ops runs node bin/launch-official.js; heroku-ops-gaps env has CLAUDE_PROJECT_DIR, CLAUDE_PLUGIN_ROOT and NODE_PATH', () => {
+test('.mcp.json: heroku-ops runs node bin/launch-official.js; heroku-ops-gaps env has CLAUDE_PROJECT_DIR and NODE_PATH', () => {
   const s = readJson('.mcp.json').mcpServers;
   assert.equal(s['heroku-ops'].command, 'node');
   assert.deepEqual(s['heroku-ops'].args, ['${CLAUDE_PLUGIN_ROOT}/bin/launch-official.js']);
@@ -106,7 +106,7 @@ test('.mcp.json: heroku-ops runs node bin/launch-official.js; heroku-ops-gaps en
   assert.equal(g.command, 'node');
   assert.deepEqual(g.args, ['${CLAUDE_PLUGIN_ROOT}/mcp-gaps/server.js']);
   assert.equal(g.env.CLAUDE_PROJECT_DIR, '${CLAUDE_PROJECT_DIR}');
-  assert.equal(g.env.CLAUDE_PLUGIN_ROOT, '${CLAUDE_PLUGIN_ROOT}');
+  assert.equal(g.env.CLAUDE_PLUGIN_ROOT, undefined);
   assert.equal(g.env.NODE_PATH, '${CLAUDE_PLUGIN_DATA}/node_modules');
 });
 
