@@ -2,7 +2,7 @@
   "mcpServers": {
     "heroku-ops": {
       "command": "node",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/bin/launch-official.js"]
+      "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/launch-official.js"]
     },
     "heroku-ops-gaps": {
       "command": "node",

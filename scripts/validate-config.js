@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 'use strict';
-// Usage: node bin/validate-config.js <projectDir>
+// Usage: node scripts/validate-config.js <projectDir>
 // Prints "OK <file>" (exit 0) or "INVALID <file>" plus one problem per line (exit 1).
 const { loadProjectConfig } = require('../lib/config');
 
