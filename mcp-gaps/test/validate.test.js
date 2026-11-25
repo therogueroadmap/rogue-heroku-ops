@@ -1,44 +1,38 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { validateRev, validateRange, validatePath, validatePaths } = require('../lib/validate');
-
-const BR = ['release'];
+const {
+  validateRev, validateRange, validatePath, validatePaths, isValidBranch,
+  REV_PATTERN, RANGE_PATTERN, REV_MESSAGE, RANGE_MESSAGE,
+} = require('../lib/validate');
 
 test('validateRev accepts valid revs', () => {
   for (const r of ['HEAD', 'origin/release', 'abc1234', 'a'.repeat(40)]) {
-    assert.deepEqual(validateRev(r, BR), { ok: true, value: r }, r);
+    assert.deepEqual(validateRev(r), { ok: true, value: r }, r);
   }
 });
 
 test('validateRev rejects invalid revs', () => {
-  const bad = ['head', 'origin/main', 'abc123', 'g'.repeat(7), 'a'.repeat(41), 'HEAD~1', 'HEAD^',
+  const bad = ['head', 'abc123', 'g'.repeat(7), 'a'.repeat(41), 'HEAD~1', 'HEAD^',
     '--all', '-x', '', ' HEAD', 'HEAD\n', '\uFF28EAD', 42, undefined];
   for (const r of bad) {
-    const res = validateRev(r, BR);
+    const res = validateRev(r);
     assert.equal(res.ok, false, String(r));
     assert.equal(typeof res.reason, 'string');
     assert.match(res.reason, /rev/);
   }
 });
 
-test('validateRev rejects origin/ refs when deployBranch is malformed', () => {
-  for (const b of ['a b', 'x..y', '-x', '', 'a/', undefined, 'a.*']) {
-    assert.equal(validateRev('origin/' + b, [b]).ok, false, String(b));
-  }
-  assert.equal(validateRev('origin/feat/x-1', ['feat/x-1']).ok, true);
-});
-
 test('validateRange accepts REV..REV', () => {
-  assert.deepEqual(validateRange('origin/release..HEAD', BR), {
+  assert.deepEqual(validateRange('origin/release..HEAD'), {
     ok: true, value: 'origin/release..HEAD', from: 'origin/release', to: 'HEAD',
   });
 });
 
 test('validateRange rejects malformed ranges', () => {
-  for (const r of ['HEAD...HEAD', 'HEAD..HEAD..HEAD', '..HEAD', 'HEAD..', 'HEAD..origin/main',
+  for (const r of ['HEAD...HEAD', 'HEAD..HEAD..HEAD', '..HEAD', 'HEAD..', 'HEAD..origin/a b',
     'HEAD .. HEAD', 'HEAD', 42, undefined]) {
-    const res = validateRange(r, BR);
+    const res = validateRange(r);
     assert.equal(res.ok, false, String(r));
     assert.match(res.reason, /range/);
   }
@@ -72,15 +66,43 @@ test('validatePaths', () => {
   assert.match(validatePaths('a').reason, /paths/);
 });
 
-test('validateRev and validateRange accept origin/<b> for any deploy branch', () => {
-  assert.equal(validateRev('origin/develop', ['main', 'develop']).ok, true);
-  assert.equal(validateRev('origin/main', ['main', 'develop']).ok, true);
-  assert.equal(validateRev('origin/feature', ['main', 'develop']).ok, false);
-  assert.equal(validateRange('origin/main..origin/develop', ['main', 'develop']).ok, true);
-  assert.equal(validateRange('origin/main..origin/feature', ['main', 'develop']).ok, false);
+test('any remote branch accepted', () => {
+  for (const r of ['origin/main', 'origin/feature/JIRA-12_fix', 'origin/release/1.4', 'origin/release/2026-12']) {
+    assert.deepEqual(validateRev(r), { ok: true, value: r }, r);
+  }
+  assert.equal(validateRev('origin/anything', ['ignored']).ok, true);
+});
+
+test('invalid remote refs rejected', () => {
+  for (const r of ['origin/HEAD', 'origin/-x', 'origin/.x', 'origin/x.', 'origin/a..b', 'origin/a b',
+    'origin/a~1', 'origin/', 'refs/heads/main', 'main']) {
+    assert.deepEqual(validateRev(r), { ok: false, reason: REV_MESSAGE }, r);
+  }
+});
+
+test('range with dotted branches', () => {
+  const res = validateRange('origin/release/1.4..HEAD');
+  assert.equal(res.ok, true);
+  assert.equal(res.from, 'origin/release/1.4');
+  assert.equal(res.to, 'HEAD');
+  assert.equal(validateRange('origin/main..origin/feature/x').ok, true);
+  assert.deepEqual(validateRange('origin/HEAD..HEAD'), { ok: false, reason: RANGE_MESSAGE });
+});
+
+test('REV_PATTERN and RANGE_PATTERN accept dotted branches', () => {
+  assert.equal(REV_PATTERN.test('origin/release/1.4'), true);
+  assert.equal(RANGE_PATTERN.test('abc1234..origin/release/1.4'), true);
+  assert.equal(REV_PATTERN.test('origin/a..b'), false);
+});
+
+test('isValidBranch', () => {
+  assert.equal(isValidBranch('release/1.4'), true);
+  assert.equal(isValidBranch('HEAD'), false);
+  assert.equal(isValidBranch('a..b'), false);
+  assert.equal(isValidBranch(undefined), false);
 });
 
 test('validation messages are English', () => {
-  assert.match(validateRev('x', BR).reason, /^The rev parameter must be/);
+  assert.match(validateRev('x').reason, /^The rev parameter must be/);
   assert.match(validatePath('../x').reason, /^The path parameter must be/);
 });

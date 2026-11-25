@@ -5,9 +5,10 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const {
-  PLUGIN_AGENT, MCP_PREFIX, GAPS_PREFIX, classifyMcpTool, checkMcpInput, isPathAllowed,
-  isCredentialPath, patternTargetsCredentials, isSimpleGrepGlob,
+  PLUGIN_AGENT, AGENT_INTERNAL_TOOLS, MCP_PREFIX, GAPS_PREFIX, classifyMcpTool, checkMcpInput, isPathAllowed, containingRoot,
+  isCredentialPath, hasGitSegment, patternTargetsCredentials, isSimpleGrepGlob,
 } = require('./policy.js');
+const { readRoots } = require('../../lib/config.js');
 const { validateReadOnlySql, wrapReadOnly, unwrapReadOnly } = require('./sql.js');
 
 // Cap on any `command` input.
@@ -81,22 +82,26 @@ function evaluateMcp(toolName, input, config) {
 const escapesPath = (p) =>
   typeof p === 'string' && (path.win32.isAbsolute(p) || path.posix.isAbsolute(p) || p.includes('..') || /[{}]/.test(p));
 
-function evaluatePathTool(toolName, input, projectDir) {
+function evaluatePathTool(toolName, input, projectDir, roots) {
   const p = toolName === 'Read' ? input.file_path : input.path;
-  if (!isPathAllowed(p, [projectDir])) {
-    return deny(`${toolName}: the path must be inside the project directory (pass a path inside it).`);
+  if (!isPathAllowed(p, roots, { base: projectDir })) {
+    return deny(`${toolName}: the path must be inside the project directory or a configured repository.`);
   }
   const pattern = toolName === 'Glob' ? input.pattern : toolName === 'Grep' ? input.glob : undefined;
   if (escapesPath(pattern)) return deny(`${toolName}: the pattern leaves the project directory.`);
-  // Only the part below the project counts: an 8.3 segment in the project prefix (such as RUNNER~1) is not a credential.
-  const rel = path.relative(path.resolve(projectDir), path.resolve(projectDir, p));
+  // Only the part below its root counts: an 8.3 segment in the root prefix (such as RUNNER~1) is not a credential.
+  const root = containingRoot(p, roots, { base: projectDir }) || projectDir;
+  const rel = path.relative(path.resolve(root), path.resolve(projectDir, p));
+  if (hasGitSegment(rel)) {
+    return deny(`${toolName}: reading .git internals (such as .git/config) is not allowed; use the git tools.`);
+  }
   if (isCredentialPath(rel) || patternTargetsCredentials(pattern)) {
     return deny(`${toolName}: reading .env files and credential files is not allowed.`);
   }
   if (toolName === 'Grep' && !grepScopeOk(p, pattern, projectDir)) {
     return deny('Grep over a directory needs a simple glob such as **/*.js or src/*.sql.');
   }
-  return allowN0(`${toolName} inside the project directory.`);
+  return allowN0(`${toolName} inside the project directory or a configured repository.`);
 }
 
 // Grep over a directory searches file contents of the whole tree: it needs a glob from the allow-list
@@ -134,10 +139,15 @@ function evaluate(hookInput, configResult, projectDir) {
 
     // Rule 1: plugin tools only for the plugin agent.
     if (isPluginTool && !isAgent) return deny(AGENT_HINT);
-    // Rule 2: the main session and other agents keep their own Read/Grep/Glob.
-    if (isPathTool && !isAgent) return null;
-    // Rule 3: the agent reads only inside the project, never credentials.
-    if (isPathTool) return evaluatePathTool(toolName, input, projectDir);
+    // Rule 2: the main session and other agents keep all their non-plugin tools (rule 1 already denied the plugin ones).
+    if (!isAgent) return null;
+    // The agent's own subagent-mechanism tools are not the guard's to decide.
+    if (AGENT_INTERNAL_TOOLS.includes(toolName)) return null;
+    // Rule 3: the agent reads only inside the project or configured repositories, never credentials.
+    if (isPathTool) {
+      const roots = configResult && configResult.ok ? readRoots(configResult.config, projectDir) : [projectDir];
+      return evaluatePathTool(toolName, input, projectDir, roots);
+    }
     // Rules 4 and 5: plugin tools need a valid config; get_config stays open to show the problems.
     if (isPluginTool) {
       if (!configResult || !configResult.ok) {

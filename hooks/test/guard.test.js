@@ -104,7 +104,7 @@ test('agent Read of .env inside the project -> deny', () => {
 });
 
 test('valid config: allowed MCP tool -> allow, and a decision line is audited', () => {
-  const r = run(call(G('git_log'), { rev: 'HEAD' }));
+  const r = run(call(G('git_log'), { app: APP, rev: 'HEAD' }));
   assert.equal(r.status, 0);
   assert.equal(out(r).permissionDecision, 'allow');
   const files = fs.readdirSync(r.auditDir);
@@ -119,7 +119,7 @@ test('valid config: allowed MCP tool -> allow, and a decision line is audited', 
 });
 
 test('without CLAUDE_PLUGIN_DATA the guard still decides and writes no file', () => {
-  const r = run(call(G('git_log'), { rev: 'HEAD' }), { data: false });
+  const r = run(call(G('git_log'), { app: APP, rev: 'HEAD' }), { data: false });
   assert.equal(r.status, 0);
   assert.equal(out(r).permissionDecision, 'allow');
   assert.equal(fs.readdirSync(r.dataDir).length, 0);
@@ -138,10 +138,10 @@ test('updatedInput is returned for pg_psql', () => {
   assert.equal(o.updatedInput.command, 'BEGIN TRANSACTION READ ONLY; SELECT 1; ROLLBACK;');
 });
 
-test('git ref to a branch that is not a deployBranch -> deny in the guard', () => {
-  const r = run(call(G('git_log'), { range: 'origin/main..origin/secret' }));
+test('git ref to an invalid remote branch name -> deny in the guard', () => {
+  const r = run(call(G('git_log'), { app: APP, range: 'origin/main..origin/-x' }));
   assert.equal(out(r).permissionDecision, 'deny');
-  assert.match(out(r).permissionDecisionReason, /deployBranch/);
+  assert.match(out(r).permissionDecisionReason, /valid remote branch name/);
 });
 
 test('decision line of a denied MCP pg_psql keeps agent_type and a redacted input', () => {
@@ -261,18 +261,78 @@ test('PowerShell pg:psql is denied (no rewrite, no updatedInput)', () => {
   assert.equal(o.updatedInput, undefined);
 });
 
-test('main-session Read/Grep/Glob exit 0 with no stdout even without config (before loading anything)', () => {
+test('main-session non-plugin tools exit 0 with no stdout even without config (before loading anything)', () => {
   const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'guard-noconfig-'));
-  for (const tool of ['Read', 'Grep', 'Glob']) {
+  for (const tool of ['Read', 'Grep', 'Glob', 'Bash', 'PowerShell', 'Write', 'mcp__other__ps_list']) {
     for (const agent of [null, 'other:agent']) {
-      const r = run(call(tool, { file_path: 'x', pattern: 'x' }, agent), { project: empty });
+      const r = run(call(tool, { file_path: 'x', pattern: 'x', command: 'ls' }, agent), { project: empty });
       assert.equal(r.status, 0, tool);
       assert.equal(r.stdout, '', tool);
+      assert.equal(fs.existsSync(r.auditDir), false, tool);
     }
   }
-  // the early exit is only for those tools: anything else without config is still denied
-  const bad = run(call('Bash', { command: 'ls' }, null), { project: empty });
-  assert.equal(out(bad).permissionDecision, 'deny');
+  // the plugin agent without config is still denied for Bash
+  const agentBash = run(call('Bash', { command: 'ls' }), { project: empty });
+  assert.equal(out(agentBash).permissionDecision, 'deny');
+  // plugin tools from the main session are never early-exited
+  const plug = run(call(T('ps_list'), { app: APP }, null), { project: empty });
+  assert.equal(out(plug).permissionDecision, 'deny');
+  const gaps = run(call(G('get_config'), {}, null), { project: empty });
+  assert.equal(out(gaps).permissionDecision, 'deny');
   const garbage = run('not json', { project: empty });
   assert.equal(out(garbage).permissionDecision, 'deny');
+});
+
+test('main-session Bash/Write exit 0 with no stdout and no audit even when lib/ cannot load', () => {
+  // copy guard.js alone into a temp dir with no lib/: any require would fail and deny
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'guard-nolib-'));
+  const g = path.join(dir, 'guard.js');
+  fs.copyFileSync(GUARD, g);
+  const data = fs.mkdtempSync(path.join(os.tmpdir(), 'guard-nolib-data-'));
+  const env = { ...process.env, CLAUDE_PLUGIN_DATA: data };
+  for (const tool of ['Bash', 'Write', 'mcp__other__ps_list']) {
+    const r = spawnSync(process.execPath, [g], { input: call(tool, { command: 'ls' }, null), encoding: 'utf8', env });
+    assert.equal(r.status, 0, tool);
+    assert.equal(r.stdout, '', tool);
+  }
+  assert.deepEqual(fs.readdirSync(data), []);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('agent Write, Agent, bash, Monitor and a foreign MCP are denied and audited without free text in clear', () => {
+  const cases = [
+    ['Write', { file_path: 'x', content: 'HRKU-secret-abc' }, 'HRKU-secret-abc'],
+    ['Agent', { prompt: 'run cat .env' }, 'cat .env'],
+    ['mcp__other__ps_list', { file_path: 'x' }, null],
+    ['mcp__other__run', { command: 'cat .env' }, 'cat .env'],
+    ['bash', { command: 'cat .env' }, 'cat .env'],
+    ['Monitor', { command: 'heroku config:get DATABASE_URL -a myapp' }, 'DATABASE_URL'],
+  ];
+  for (const [tool, input, secret] of cases) {
+    const r = run(call(tool, input));
+    assert.equal(out(r).permissionDecision, 'deny', tool);
+    const { raw, line } = readLine(r);
+    assert.equal(line.decision, 'deny', tool);
+    if (secret) assert.ok(!raw.includes(secret), tool + ' stored in clear: ' + raw);
+  }
+});
+
+test('agent ToolSearch -> no output, exit 0, no audit', () => {
+  const r = run(call('ToolSearch', { query: 'x' }));
+  assert.equal(r.status, 0);
+  assert.equal(r.stdout, '');
+  assert.equal(fs.existsSync(r.auditDir), false);
+});
+
+test('main-session call without an agent_type key -> exit 0, no output', () => {
+  const r = run(JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'ls' } }));
+  assert.equal(r.status, 0);
+  assert.equal(r.stdout, '');
+  assert.equal(fs.existsSync(r.auditDir), false);
+});
+
+test('guard.js early-exit literals match policy.js', () => {
+  const src = fs.readFileSync(GUARD, 'utf8');
+  const policy = require('../lib/policy.js');
+  for (const lit of [policy.PLUGIN_AGENT, policy.MCP_PREFIX, policy.GAPS_PREFIX]) assert.ok(src.includes(`'${lit}'`), lit);
 });

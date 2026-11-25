@@ -1,7 +1,7 @@
 'use strict';
 
 const { validateRev, validateRange, validatePath, validatePaths } = require('./validate');
-const { appByName, deployBranches } = require('../../lib/config');
+const { appByName, repoDirFor } = require('../../lib/config');
 const { isCredentialPath } = require('../../hooks/lib/policy');
 
 const BACKUP_ID_RE = /^[abr]\d{3,6}$/;
@@ -13,11 +13,12 @@ const HEROKU_KEYS = {
 };
 
 const GIT_KEYS = {
-  git_fetch: [],
-  git_log: ['rev', 'range', 'format', 'n', 'paths'],
-  git_show: ['rev', 'path', 'format'],
-  git_ls_tree: ['rev', 'recursive', 'nameOnly', 'paths'],
-  git_diff: ['from', 'to', 'format', 'paths'],
+  git_fetch: ['app'],
+  git_branches: ['app'],
+  git_log: ['app', 'rev', 'range', 'format', 'n', 'paths'],
+  git_show: ['app', 'rev', 'path', 'format'],
+  git_ls_tree: ['app', 'rev', 'recursive', 'nameOnly', 'paths'],
+  git_diff: ['app', 'from', 'to', 'format', 'paths'],
 };
 
 const FORMAT_FLAGS = { oneline: '--oneline', stat: '--stat', 'name-only': '--name-only' };
@@ -116,11 +117,11 @@ function herokuArgs(tool, input, config) {
   return ok(['pg:backups:capture', '-a', app.value]);
 }
 
-function gitLog(input, branches, P) {
+function gitLog(input, P) {
   const hasRev = has(input, 'rev');
   const hasRange = has(input, 'range');
   if (hasRev === hasRange) return fail('Provide exactly one of the rev or range parameters.');
-  const target = hasRev ? validateRev(input.rev, branches) : validateRange(input.range, branches);
+  const target = hasRev ? validateRev(input.rev) : validateRange(input.range);
   if (!target.ok) return target;
   const fmt = validateFormat(input.format, ['oneline', 'stat', 'name-only']);
   if (!fmt.ok) return fmt;
@@ -133,9 +134,9 @@ function gitLog(input, branches, P) {
   return ok([...P, 'log', '--no-ext-diff', '--no-textconv', ...fmt.flags, '-n', String(n.value), target.value, '--', ...paths.list]);
 }
 
-function gitShow(input, branches, P) {
+function gitShow(input, P) {
   if (!has(input, 'rev')) return fail('The rev parameter is required.');
-  const rev = validateRev(input.rev, branches);
+  const rev = validateRev(input.rev);
   if (!rev.ok) return rev;
   if (has(input, 'path')) {
     if (has(input, 'format')) return fail('The path and format parameters cannot be combined.');
@@ -150,9 +151,9 @@ function gitShow(input, branches, P) {
   return ok([...P, 'show', '--no-ext-diff', '--no-textconv', ...fmt.flags, rev.value]);
 }
 
-function gitLsTree(input, branches, P) {
+function gitLsTree(input, P) {
   if (!has(input, 'rev')) return fail('The rev parameter is required.');
-  const rev = validateRev(input.rev, branches);
+  const rev = validateRev(input.rev);
   if (!rev.ok) return rev;
   const recursive = validateBool(input.recursive, 'recursive');
   if (!recursive.ok) return recursive;
@@ -168,11 +169,11 @@ function gitLsTree(input, branches, P) {
   ]);
 }
 
-function gitDiff(input, branches, P) {
+function gitDiff(input, P) {
   if (!has(input, 'from') || !has(input, 'to')) return fail('The from and to parameters are required.');
-  const from = validateRev(input.from, branches);
+  const from = validateRev(input.from);
   if (!from.ok) return from;
-  const to = validateRev(input.to, branches);
+  const to = validateRev(input.to);
   if (!to.ok) return to;
   const fmt = validateFormat(input.format, ['stat', 'name-only']);
   if (!fmt.ok) return fmt;
@@ -183,19 +184,23 @@ function gitDiff(input, branches, P) {
   return ok([...P, 'diff', '--no-ext-diff', '--no-textconv', ...fmt.flags, `${from.value}..${to.value}`, '--', ...paths.list]);
 }
 
-// ctx: { config, projectDir, platform }. Revs may name origin/<deployBranch of any configured app>.
+// ctx: { config, projectDir, platform }. The -C directory is the repository of the app named in the input.
 function gitArgs(tool, input, { config, projectDir, platform = process.platform }) {
   const check = checkInput(tool, input, GIT_KEYS);
   if (!check.ok) return check;
-  const P = GIT_PREFIX(projectDir);
-  const branches = deployBranches(config);
+  const app = validateApp(input.app, config);
+  if (!app.ok) return app;
+  const repo = repoDirFor(config, app.value, projectDir);
+  if (!repo.ok) return fail(repo.reason);
+  const P = GIT_PREFIX(repo.dir);
   switch (tool) {
     // The Git Credential Manager helper only exists on Windows.
     case 'git_fetch': return ok([...P, ...(platform === 'win32' ? ['-c', 'credential.helper=manager'] : []), 'fetch', 'origin']);
-    case 'git_log': return gitLog(input, branches, P);
-    case 'git_show': return gitShow(input, branches, P);
-    case 'git_ls_tree': return gitLsTree(input, branches, P);
-    default: return gitDiff(input, branches, P);
+    case 'git_branches': return ok([...P, 'for-each-ref', '--format=%(refname:short)', 'refs/remotes/origin']);
+    case 'git_log': return gitLog(input, P);
+    case 'git_show': return gitShow(input, P);
+    case 'git_ls_tree': return gitLsTree(input, P);
+    default: return gitDiff(input, P);
   }
 }
 

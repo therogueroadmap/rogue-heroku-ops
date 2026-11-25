@@ -16,7 +16,9 @@ function parseAgent() {
   const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/.exec(text);
   assert.ok(m, 'agent has frontmatter');
   const keys = [...m[1].matchAll(/^([A-Za-z]+):/gm)].map((x) => x[1]);
-  const tools = [...m[1].matchAll(/^ {2}- (\S+)$/gm)].map((x) => x[1]);
+  const line = /^tools: (.+)$/m.exec(m[1]);
+  assert.ok(line, 'tools is a single comma-separated line');
+  const tools = line[1].split(',').map((x) => x.trim());
   return { front: m[1], keys, tools, body: m[2], text };
 }
 
@@ -38,11 +40,19 @@ test('agent tools = Read, Grep, Glob + every N0/N1 tool with plugin prefixes, no
   }
 });
 
+test('agent frontmatter description is a quoted scalar (valid YAML)', () => {
+  const { front } = parseAgent();
+  const m = /^description: (.*)$/m.exec(front);
+  assert.ok(m, 'description line');
+  assert.match(m[1], /^"[^"]*"$/);
+});
+
 test('agent frontmatter has no hooks, mcpServers, permissionMode', () => {
   const { keys, front } = parseAgent();
   for (const k of ['hooks', 'mcpServers', 'permissionMode']) assert.ok(!keys.includes(k), k);
   assert.match(front, /^name: heroku-ops$/m);
   assert.match(front, /^model: sonnet$/m);
+  assert.doesNotMatch(front, /^ {2}- /m);
 });
 
 test('agent prompt is generic: calls get_config and get_procedure, no fixed paths or app names', () => {
@@ -60,15 +70,17 @@ test('every gaps tool in schemas.js is classified in GAPS_N0 or GAPS_N1 and vice
   assert.deepEqual(names, classified);
 });
 
-test('hooks.json PreToolUse matcher matches both prefixes and Read|Grep|Glob, not Bash', () => {
+test('hooks.json PreToolUse matcher is universal; PostToolUse matchers stay on plugin tools and Read|Grep|Glob', () => {
   const h = readJson('hooks/hooks.json').hooks;
-  const re = new RegExp(h.PreToolUse[0].matcher);
-  assert.ok(re.test(policy.MCP_PREFIX + 'ps_list'));
-  assert.ok(re.test(policy.GAPS_PREFIX + 'get_config'));
-  for (const t of ['Read', 'Grep', 'Glob']) assert.ok(re.test(t), t);
-  for (const t of ['Bash', 'PowerShell', 'Write', 'ReadFile', 'mcp__other__ps_list']) assert.ok(!re.test(t), t);
-  assert.equal(h.PostToolUse[0].matcher, h.PreToolUse[0].matcher);
-  assert.equal(h.PostToolUseFailure[0].matcher, h.PreToolUse[0].matcher);
+  assert.equal(h.PreToolUse[0].matcher, '*');
+  for (const ev of ['PostToolUse', 'PostToolUseFailure']) {
+    const re = new RegExp(h[ev][0].matcher);
+    assert.ok(re.test(policy.MCP_PREFIX + 'ps_list'), ev);
+    assert.ok(re.test(policy.GAPS_PREFIX + 'get_config'), ev);
+    for (const t of ['Read', 'Grep', 'Glob']) assert.ok(re.test(t), `${ev} ${t}`);
+    for (const t of ['Bash', 'PowerShell', 'Write', 'mcp__other__ps_list']) assert.ok(!re.test(t), `${ev} ${t}`);
+  }
+  assert.equal(h.PostToolUseFailure[0].matcher, h.PostToolUse[0].matcher);
 });
 
 test('hooks.json hooks run node in exec form (no shell) with the script path in args', () => {
@@ -155,6 +167,43 @@ test('guard.js and launch-official.js start from a plugin root with spaces in th
     assert.equal(l.status, 1);
     assert.match(l.stderr, /Run "heroku login" and restart Claude Code\./);
     assert.equal(l.stdout, '');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+function setupJsonBlocks() {
+  const md = fs.readFileSync(path.join(ROOT, 'skills', 'setup', 'SKILL.md'), 'utf8');
+  return [...md.matchAll(/```json\r?\n([\s\S]*?)```/g)].map((m) => JSON.parse(m[1]));
+}
+
+test('setup allow block = Agent(plugin agent) + every N0 tool, no N1', () => {
+  const blocks = setupJsonBlocks().filter((b) => b.permissions && b.permissions.allow);
+  assert.equal(blocks.length, 1);
+  const allow = blocks[0].permissions.allow;
+  assert.equal(new Set(allow).size, allow.length, 'no duplicates');
+  const expected = new Set([
+    `Agent(${policy.PLUGIN_AGENT})`,
+    ...[...policy.MCP_N0].map((t) => policy.MCP_PREFIX + t),
+    ...[...policy.GAPS_N0].map((t) => policy.GAPS_PREFIX + t),
+  ]);
+  assert.deepEqual(new Set(allow), expected);
+  for (const t of policy.MCP_N1) assert.ok(!allow.includes(policy.MCP_PREFIX + t), t);
+  for (const t of policy.GAPS_N1) assert.ok(!allow.includes(policy.GAPS_PREFIX + t), t);
+});
+
+test('setup examples are valid 0.2.0 configs', () => {
+  const { validateConfig } = require('../../lib/config.js');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'setup-ex-'));
+  try {
+    fs.mkdirSync(path.join(tmp, '.git'));
+    const configs = setupJsonBlocks().filter((b) => b.apps);
+    assert.ok(configs.length >= 1);
+    for (const cfg of configs) {
+      assert.equal(cfg.migrations, undefined, 'no migrations at the root');
+      for (const app of cfg.apps) if (app.repoPath !== undefined) app.repoPath = tmp;
+      assert.deepEqual(validateConfig(cfg), []);
+    }
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }

@@ -11,7 +11,7 @@ const INTERNAL_ERROR = 'guard: internal error, blocked for safety';
 
 function auditDecision(hookInput, d) {
   try {
-    const { MCP_PREFIX } = require('./lib/policy.js');
+    const { MCP_PREFIX, GAPS_PREFIX } = require('./lib/policy.js');
     const ae = require('./lib/audit-entry.js');
     const tool = hookInput && typeof hookInput.tool_name === 'string' ? hookInput.tool_name : null;
     const ti = hookInput && hookInput.tool_input;
@@ -26,13 +26,19 @@ function auditDecision(hookInput, d) {
       }
     }
     // A denied shell command is never stored, not even inside the reason. Plain split/join, no regex.
-    const isShellDeny = d.decision === 'deny' && (tool === 'Bash' || tool === 'PowerShell');
-    if (isShellDeny && cmd !== '' && typeof reason === 'string') reason = reason.split(cmd).join('[command]');
+    // Same for any other denied tool that is not a plugin tool or a path tool (bash, Monitor, Write, Agent...).
+    const isPlugin = typeof tool === 'string' && (tool.startsWith(MCP_PREFIX) || tool.startsWith(GAPS_PREFIX));
+    const isPath = ['Read', 'Grep', 'Glob'].includes(tool);
+    const isOpaqueDeny = d.decision === 'deny' && !isPlugin && !isPath;
+    if (isOpaqueDeny && cmd !== '' && typeof reason === 'string') reason = reason.split(cmd).join('[command]');
     let input;
     try {
       const { MAX_COMMAND } = require('./lib/evaluate.js');
       const isShell = tool === 'Bash' || tool === 'PowerShell';
-      if (d.decision === 'deny' && (isShell || cmd.length > MAX_COMMAND)) {
+      if (isOpaqueDeny && !isShell && typeof (ti && ti.command) !== 'string') {
+        // No command to summarize: only the key names, never the values.
+        input = { keys: Object.keys(ti && typeof ti === 'object' ? ti : {}) };
+      } else if (d.decision === 'deny' && (isOpaqueDeny || cmd.length > MAX_COMMAND)) {
         // Denied free text is never stored: only exe, sub, length and a short sha256.
         input = ae.summarizeDeniedCommand(cmd);
       } else {
@@ -65,10 +71,12 @@ let hookInput = null;
 let d;
 try {
   hookInput = JSON.parse(fs.readFileSync(0, 'utf8'));
-  // Main session and other agents keep their own Read/Grep/Glob: leave before loading anything else,
-  // so a broken module or config can never block them. Literal, no dependencies.
-  if (hookInput && ['Read', 'Grep', 'Glob'].includes(hookInput.tool_name) &&
-      hookInput.agent_type !== 'rogue-heroku-ops:heroku-ops') {
+  // Main session and other agents keep their own non-plugin tools: leave before loading anything else,
+  // so a broken module or config can never block them. Literals, no dependencies.
+  if (hookInput && typeof hookInput.tool_name === 'string' &&
+      hookInput.agent_type !== 'rogue-heroku-ops:heroku-ops' &&
+      !hookInput.tool_name.startsWith('mcp__plugin_rogue-heroku-ops_heroku-ops__') &&
+      !hookInput.tool_name.startsWith('mcp__plugin_rogue-heroku-ops_heroku-ops-gaps__')) {
     process.exit(0);
   }
   const { evaluate } = require('./lib/evaluate.js');
