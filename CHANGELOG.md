@@ -6,6 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [0.2.0] - 2026-11-24
 
+### Security
+
+- The guard now enforces the agent's tool set itself. Until 0.1.1 the guard only watched the plugin MCP tools and Read, Grep and Glob, so if Claude Code did not apply the agent's `tools:` list, the agent could run Bash, PowerShell or any other tool outside the guard (for example, read `.env` through a shell command). The PreToolUse matcher now covers every tool: the agent may use only its MCP tools, Read, Grep, Glob, `ToolSearch` and `SubagentHandback`; anything else is denied and audited. The main session and other agents are not affected.
+- The agent's `tools:` frontmatter is now a single comma-separated line, the documented format.
+
 ### Changed
 
 - BREAKING: migrations moved into each app. A `migrations` block at the root of the config is now invalid; run `/rogue-heroku-ops:setup` to migrate a 0.1.x config.

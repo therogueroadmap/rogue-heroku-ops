@@ -16,7 +16,9 @@ function parseAgent() {
   const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/.exec(text);
   assert.ok(m, 'agent has frontmatter');
   const keys = [...m[1].matchAll(/^([A-Za-z]+):/gm)].map((x) => x[1]);
-  const tools = [...m[1].matchAll(/^ {2}- (\S+)$/gm)].map((x) => x[1]);
+  const line = /^tools: (.+)$/m.exec(m[1]);
+  assert.ok(line, 'tools is a single comma-separated line');
+  const tools = line[1].split(',').map((x) => x.trim());
   return { front: m[1], keys, tools, body: m[2], text };
 }
 
@@ -43,6 +45,7 @@ test('agent frontmatter has no hooks, mcpServers, permissionMode', () => {
   for (const k of ['hooks', 'mcpServers', 'permissionMode']) assert.ok(!keys.includes(k), k);
   assert.match(front, /^name: heroku-ops$/m);
   assert.match(front, /^model: sonnet$/m);
+  assert.doesNotMatch(front, /^ {2}- /m);
 });
 
 test('agent prompt is generic: calls get_config and get_procedure, no fixed paths or app names', () => {
@@ -60,15 +63,17 @@ test('every gaps tool in schemas.js is classified in GAPS_N0 or GAPS_N1 and vice
   assert.deepEqual(names, classified);
 });
 
-test('hooks.json PreToolUse matcher matches both prefixes and Read|Grep|Glob, not Bash', () => {
+test('hooks.json PreToolUse matcher is universal; PostToolUse matchers stay on plugin tools and Read|Grep|Glob', () => {
   const h = readJson('hooks/hooks.json').hooks;
-  const re = new RegExp(h.PreToolUse[0].matcher);
-  assert.ok(re.test(policy.MCP_PREFIX + 'ps_list'));
-  assert.ok(re.test(policy.GAPS_PREFIX + 'get_config'));
-  for (const t of ['Read', 'Grep', 'Glob']) assert.ok(re.test(t), t);
-  for (const t of ['Bash', 'PowerShell', 'Write', 'ReadFile', 'mcp__other__ps_list']) assert.ok(!re.test(t), t);
-  assert.equal(h.PostToolUse[0].matcher, h.PreToolUse[0].matcher);
-  assert.equal(h.PostToolUseFailure[0].matcher, h.PreToolUse[0].matcher);
+  assert.equal(h.PreToolUse[0].matcher, '*');
+  for (const ev of ['PostToolUse', 'PostToolUseFailure']) {
+    const re = new RegExp(h[ev][0].matcher);
+    assert.ok(re.test(policy.MCP_PREFIX + 'ps_list'), ev);
+    assert.ok(re.test(policy.GAPS_PREFIX + 'get_config'), ev);
+    for (const t of ['Read', 'Grep', 'Glob']) assert.ok(re.test(t), `${ev} ${t}`);
+    for (const t of ['Bash', 'PowerShell', 'Write', 'mcp__other__ps_list']) assert.ok(!re.test(t), `${ev} ${t}`);
+  }
+  assert.equal(h.PostToolUseFailure[0].matcher, h.PostToolUse[0].matcher);
 });
 
 test('hooks.json hooks run node in exec form (no shell) with the script path in args', () => {

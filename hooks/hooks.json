@@ -9,7 +9,7 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "^(mcp__plugin_rogue-heroku-ops_heroku-ops__.*|mcp__plugin_rogue-heroku-ops_heroku-ops-gaps__.*|Read|Grep|Glob)$",
+        "matcher": "*",
         "hooks": [
           { "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/guard.js"], "onFailure": "block", "timeout": 30 }
         ]
