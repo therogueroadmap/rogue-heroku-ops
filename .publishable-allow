@@ -1,4 +1,4 @@
-^C:\\\\Users\\\\dev(?![\w.~-])  # test fixture: synthetic path C:\\Users\\dev in hooks/test/policy.test.js
+(?i)^[CD]:\\\\Users\\\\dev(?![\w.~-])  # test fixture: synthetic paths (any case, drive C or D) C:\\Users\\dev in hooks/test/policy.test.js
 (?i)^c:/users/dev(?![\w.~-])  # test fixture: synthetic path c:/users/dev in hooks/test/policy.test.js
 ^C:/Users/\*  # test fixture: synthetic glob C:/Users/* in hooks/test/evaluate.test.js
 ^C:\\\\Users\\\\\*  # test fixture: synthetic glob C:\\Users\\* in hooks/test/evaluate.test.js
@@ -7,3 +7,4 @@ PASSWORD=s3cr3tValor  # test fixture: synthetic DB_PASSWORD in hooks/test/audit.
 PASSWORD=MRK9xValor  # test fixture: synthetic DB_PASSWORD in hooks/test/guard.test.js
 token: '\[redacted\]  # test fixture: redacted test token in hooks/test/guard.test.js
 (?i)API_KEY: 'secret-test  # test fixture: synthetic HEROKU_API_KEY in mcp-gaps/test/server.test.js
+(?i)^/home/me(?![\w.~-])  # docs example: placeholder repoPath /home/me/code/my-app in README.md
