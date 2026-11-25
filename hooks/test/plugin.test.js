@@ -40,6 +40,13 @@ test('agent tools = Read, Grep, Glob + every N0/N1 tool with plugin prefixes, no
   }
 });
 
+test('agent frontmatter description is a quoted scalar (valid YAML)', () => {
+  const { front } = parseAgent();
+  const m = /^description: (.*)$/m.exec(front);
+  assert.ok(m, 'description line');
+  assert.match(m[1], /^"[^"]*"$/);
+});
+
 test('agent frontmatter has no hooks, mcpServers, permissionMode', () => {
   const { keys, front } = parseAgent();
   for (const k of ['hooks', 'mcpServers', 'permissionMode']) assert.ok(!keys.includes(k), k);

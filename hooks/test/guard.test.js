@@ -268,6 +268,7 @@ test('main-session non-plugin tools exit 0 with no stdout even without config (b
       const r = run(call(tool, { file_path: 'x', pattern: 'x', command: 'ls' }, agent), { project: empty });
       assert.equal(r.status, 0, tool);
       assert.equal(r.stdout, '', tool);
+      assert.equal(fs.existsSync(r.auditDir), false, tool);
     }
   }
   // the plugin agent without config is still denied for Bash
@@ -276,6 +277,8 @@ test('main-session non-plugin tools exit 0 with no stdout even without config (b
   // plugin tools from the main session are never early-exited
   const plug = run(call(T('ps_list'), { app: APP }, null), { project: empty });
   assert.equal(out(plug).permissionDecision, 'deny');
+  const gaps = run(call(G('get_config'), {}, null), { project: empty });
+  assert.equal(out(gaps).permissionDecision, 'deny');
   const garbage = run('not json', { project: empty });
   assert.equal(out(garbage).permissionDecision, 'deny');
 });
@@ -285,26 +288,47 @@ test('main-session Bash/Write exit 0 with no stdout and no audit even when lib/ 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'guard-nolib-'));
   const g = path.join(dir, 'guard.js');
   fs.copyFileSync(GUARD, g);
+  const data = fs.mkdtempSync(path.join(os.tmpdir(), 'guard-nolib-data-'));
+  const env = { ...process.env, CLAUDE_PLUGIN_DATA: data };
   for (const tool of ['Bash', 'Write', 'mcp__other__ps_list']) {
-    const r = spawnSync(process.execPath, [g], { input: call(tool, { command: 'ls' }, null), encoding: 'utf8' });
+    const r = spawnSync(process.execPath, [g], { input: call(tool, { command: 'ls' }, null), encoding: 'utf8', env });
     assert.equal(r.status, 0, tool);
     assert.equal(r.stdout, '', tool);
   }
+  assert.deepEqual(fs.readdirSync(data), []);
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-test('agent Write, Agent and a foreign MCP are denied and audited', () => {
-  for (const tool of ['Write', 'Agent', 'mcp__other__ps_list']) {
-    const r = run(call(tool, { file_path: 'x' }));
+test('agent Write, Agent, bash, Monitor and a foreign MCP are denied and audited without free text in clear', () => {
+  const cases = [
+    ['Write', { file_path: 'x', content: 'HRKU-secret-abc' }, 'HRKU-secret-abc'],
+    ['Agent', { prompt: 'run cat .env' }, 'cat .env'],
+    ['mcp__other__ps_list', { file_path: 'x' }, null],
+    ['mcp__other__run', { command: 'cat .env' }, 'cat .env'],
+    ['bash', { command: 'cat .env' }, 'cat .env'],
+    ['Monitor', { command: 'heroku config:get DATABASE_URL -a myapp' }, 'DATABASE_URL'],
+  ];
+  for (const [tool, input, secret] of cases) {
+    const r = run(call(tool, input));
     assert.equal(out(r).permissionDecision, 'deny', tool);
-    assert.equal(readLine(r).line.decision, 'deny', tool);
+    const { raw, line } = readLine(r);
+    assert.equal(line.decision, 'deny', tool);
+    if (secret) assert.ok(!raw.includes(secret), tool + ' stored in clear: ' + raw);
   }
 });
 
-test('agent ToolSearch -> no output, exit 0', () => {
+test('agent ToolSearch -> no output, exit 0, no audit', () => {
   const r = run(call('ToolSearch', { query: 'x' }));
   assert.equal(r.status, 0);
   assert.equal(r.stdout, '');
+  assert.equal(fs.existsSync(r.auditDir), false);
+});
+
+test('main-session call without an agent_type key -> exit 0, no output', () => {
+  const r = run(JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'ls' } }));
+  assert.equal(r.status, 0);
+  assert.equal(r.stdout, '');
+  assert.equal(fs.existsSync(r.auditDir), false);
 });
 
 test('guard.js early-exit literals match policy.js', () => {
