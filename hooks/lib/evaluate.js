@@ -5,7 +5,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const {
-  PLUGIN_AGENT, MCP_PREFIX, GAPS_PREFIX, classifyMcpTool, checkMcpInput, isPathAllowed, containingRoot,
+  PLUGIN_AGENT, AGENT_INTERNAL_TOOLS, MCP_PREFIX, GAPS_PREFIX, classifyMcpTool, checkMcpInput, isPathAllowed, containingRoot,
   isCredentialPath, hasGitSegment, patternTargetsCredentials, isSimpleGrepGlob,
 } = require('./policy.js');
 const { readRoots } = require('../../lib/config.js');
@@ -139,8 +139,10 @@ function evaluate(hookInput, configResult, projectDir) {
 
     // Rule 1: plugin tools only for the plugin agent.
     if (isPluginTool && !isAgent) return deny(AGENT_HINT);
-    // Rule 2: the main session and other agents keep their own Read/Grep/Glob.
-    if (isPathTool && !isAgent) return null;
+    // Rule 2: the main session and other agents keep all their non-plugin tools (rule 1 already denied the plugin ones).
+    if (!isAgent) return null;
+    // The agent's own subagent-mechanism tools are not the guard's to decide.
+    if (AGENT_INTERNAL_TOOLS.includes(toolName)) return null;
     // Rule 3: the agent reads only inside the project or configured repositories, never credentials.
     if (isPathTool) {
       const roots = configResult && configResult.ok ? readRoots(configResult.config, projectDir) : [projectDir];

@@ -261,18 +261,54 @@ test('PowerShell pg:psql is denied (no rewrite, no updatedInput)', () => {
   assert.equal(o.updatedInput, undefined);
 });
 
-test('main-session Read/Grep/Glob exit 0 with no stdout even without config (before loading anything)', () => {
+test('main-session non-plugin tools exit 0 with no stdout even without config (before loading anything)', () => {
   const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'guard-noconfig-'));
-  for (const tool of ['Read', 'Grep', 'Glob']) {
+  for (const tool of ['Read', 'Grep', 'Glob', 'Bash', 'PowerShell', 'Write', 'mcp__other__ps_list']) {
     for (const agent of [null, 'other:agent']) {
-      const r = run(call(tool, { file_path: 'x', pattern: 'x' }, agent), { project: empty });
+      const r = run(call(tool, { file_path: 'x', pattern: 'x', command: 'ls' }, agent), { project: empty });
       assert.equal(r.status, 0, tool);
       assert.equal(r.stdout, '', tool);
     }
   }
-  // the early exit is only for those tools: anything else without config is still denied
-  const bad = run(call('Bash', { command: 'ls' }, null), { project: empty });
-  assert.equal(out(bad).permissionDecision, 'deny');
+  // the plugin agent without config is still denied for Bash
+  const agentBash = run(call('Bash', { command: 'ls' }), { project: empty });
+  assert.equal(out(agentBash).permissionDecision, 'deny');
+  // plugin tools from the main session are never early-exited
+  const plug = run(call(T('ps_list'), { app: APP }, null), { project: empty });
+  assert.equal(out(plug).permissionDecision, 'deny');
   const garbage = run('not json', { project: empty });
   assert.equal(out(garbage).permissionDecision, 'deny');
+});
+
+test('main-session Bash/Write exit 0 with no stdout and no audit even when lib/ cannot load', () => {
+  // copy guard.js alone into a temp dir with no lib/: any require would fail and deny
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'guard-nolib-'));
+  const g = path.join(dir, 'guard.js');
+  fs.copyFileSync(GUARD, g);
+  for (const tool of ['Bash', 'Write', 'mcp__other__ps_list']) {
+    const r = spawnSync(process.execPath, [g], { input: call(tool, { command: 'ls' }, null), encoding: 'utf8' });
+    assert.equal(r.status, 0, tool);
+    assert.equal(r.stdout, '', tool);
+  }
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('agent Write, Agent and a foreign MCP are denied and audited', () => {
+  for (const tool of ['Write', 'Agent', 'mcp__other__ps_list']) {
+    const r = run(call(tool, { file_path: 'x' }));
+    assert.equal(out(r).permissionDecision, 'deny', tool);
+    assert.equal(readLine(r).line.decision, 'deny', tool);
+  }
+});
+
+test('agent ToolSearch -> no output, exit 0', () => {
+  const r = run(call('ToolSearch', { query: 'x' }));
+  assert.equal(r.status, 0);
+  assert.equal(r.stdout, '');
+});
+
+test('guard.js early-exit literals match policy.js', () => {
+  const src = fs.readFileSync(GUARD, 'utf8');
+  const policy = require('../lib/policy.js');
+  for (const lit of [policy.PLUGIN_AGENT, policy.MCP_PREFIX, policy.GAPS_PREFIX]) assert.ok(src.includes(`'${lit}'`), lit);
 });

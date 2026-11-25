@@ -35,6 +35,9 @@ class ReadonlySet extends Set {
 // The only agent allowed to use the plugin tools (exact match on the hook input agent_type).
 const PLUGIN_AGENT = 'rogue-heroku-ops:heroku-ops';
 
+// Tools of the subagent mechanism itself: the guard never decides on them for the plugin agent.
+const AGENT_INTERNAL_TOOLS = Object.freeze(['ToolSearch', 'SubagentHandback']);
+
 const MCP_PREFIX = 'mcp__plugin_rogue-heroku-ops_heroku-ops__';
 
 const MCP_N0 = new ReadonlySet([
@@ -317,6 +320,6 @@ function isSimpleGrepGlob(glob) {
 
 module.exports = {
   isSimpleGrepGlob,
-  PLUGIN_AGENT, MCP_PREFIX, MCP_N0, MCP_N1, GAPS_PREFIX, GAPS_N0, GAPS_N1, GAPS_KEYS,
+  PLUGIN_AGENT, AGENT_INTERNAL_TOOLS, MCP_PREFIX, MCP_N0, MCP_N1, GAPS_PREFIX, GAPS_N0, GAPS_N1, GAPS_KEYS,
   classifyMcpTool, checkMcpInput, isPathAllowed, containingRoot, isCredentialPath, hasGitSegment, patternTargetsCredentials,
 };

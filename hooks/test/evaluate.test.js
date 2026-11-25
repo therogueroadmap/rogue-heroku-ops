@@ -55,15 +55,28 @@ for (const agent of [undefined, 'heroku-ops', 'other:heroku-ops', 'rogue-heroku-
 }
 
 // Rule 2
-test('Read, Grep and Glob from the main session or another agent -> no decision (null)', () => {
-  for (const agent_type of [undefined, 'general-purpose', 'other:heroku-ops']) {
-    for (const [tool_name, tool_input] of [
-      ['Read', { file_path: '/etc/hosts' }],
-      ['Grep', { pattern: 'x', path: '/' }],
-      ['Glob', { pattern: '**/.env*' }],
-    ]) {
-      assert.equal(evaluate({ tool_name, tool_input, agent_type }, okCfg, proj), null, `${tool_name} ${agent_type}`);
+test('non-plugin tools from the main session or another agent -> no decision (null)', () => {
+  for (const agent of [undefined, null, 'other:agent', 'rogue-heroku-ops:heroku-ops-x', 'heroku-ops']) {
+    for (const t of ['Read', 'Grep', 'Glob', 'Bash', 'PowerShell', 'Write', 'Edit', 'WebFetch', 'Agent', 'mcp__other__ps_list']) {
+      assert.equal(evaluate({ agent_type: agent, tool_name: t, tool_input: { command: 'ls', file_path: 'x' } }, okCfg, proj), null, `${agent} ${t}`);
     }
+  }
+});
+
+test('plugin tools without agent_type are still denied with the agent hint', () => {
+  const d = evaluate({ tool_name: T('ps_list'), tool_input: { app: APP } }, okCfg, proj);
+  assert.equal(d.decision, 'deny');
+  assert.equal(d.reason, 'Use the rogue-heroku-ops:heroku-ops agent for Heroku operations.');
+});
+
+test('agent internal tools ToolSearch and SubagentHandback -> no decision (null)', () => {
+  for (const t of ['ToolSearch', 'SubagentHandback']) assert.equal(ev(t, {}), null, t);
+});
+
+test('agent: any other tool -> deny (default-deny)', () => {
+  for (const t of ['Write', 'Edit', 'NotebookEdit', 'WebFetch', 'WebSearch', 'Agent', 'TodoWrite', 'bash', 'read',
+    'mcp__other__ps_list', 'mcp__plugin_rogue-heroku-ops_heroku-ops-gapsx__get_config', 'NoSuchTool']) {
+    assert.equal(ev(t, { file_path: path.join(proj, 'x') }).decision, 'deny', t);
   }
 });
 

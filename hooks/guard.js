@@ -65,10 +65,12 @@ let hookInput = null;
 let d;
 try {
   hookInput = JSON.parse(fs.readFileSync(0, 'utf8'));
-  // Main session and other agents keep their own Read/Grep/Glob: leave before loading anything else,
-  // so a broken module or config can never block them. Literal, no dependencies.
-  if (hookInput && ['Read', 'Grep', 'Glob'].includes(hookInput.tool_name) &&
-      hookInput.agent_type !== 'rogue-heroku-ops:heroku-ops') {
+  // Main session and other agents keep their own non-plugin tools: leave before loading anything else,
+  // so a broken module or config can never block them. Literals, no dependencies.
+  if (hookInput && typeof hookInput.tool_name === 'string' &&
+      hookInput.agent_type !== 'rogue-heroku-ops:heroku-ops' &&
+      !hookInput.tool_name.startsWith('mcp__plugin_rogue-heroku-ops_heroku-ops__') &&
+      !hookInput.tool_name.startsWith('mcp__plugin_rogue-heroku-ops_heroku-ops-gaps__')) {
     process.exit(0);
   }
   const { evaluate } = require('./lib/evaluate.js');
