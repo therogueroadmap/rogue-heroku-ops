@@ -6,7 +6,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "test": "node --test \"hooks/test/*.test.js\" \"mcp-gaps/test/*.test.js\" \"lib/test/*.test.js\" \"bin/test/*.test.js\""
+    "test": "node --test \"hooks/test/*.test.js\" \"mcp-gaps/test/*.test.js\" \"lib/test/*.test.js\" \"scripts/test/*.test.js\""
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.2",

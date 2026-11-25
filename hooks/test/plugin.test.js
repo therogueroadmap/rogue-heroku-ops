@@ -109,14 +109,14 @@ test('hooks.json PreToolUse guard fails closed: onFailure "block" with a timeout
 test('hooks.json SessionStart installs dependencies into CLAUDE_PLUGIN_DATA', () => {
   const h = readJson('hooks/hooks.json').hooks;
   assert.equal(h.SessionStart[0].hooks[0].command, 'node');
-  assert.deepEqual(h.SessionStart[0].hooks[0].args, ['${CLAUDE_PLUGIN_ROOT}/bin/install-deps.js']);
+  assert.deepEqual(h.SessionStart[0].hooks[0].args, ['${CLAUDE_PLUGIN_ROOT}/scripts/install-deps.js']);
   assert.equal(h.SessionStart[0].hooks[0].onFailure, undefined);
 });
 
-test('.mcp.json: heroku-ops runs node bin/launch-official.js; heroku-ops-gaps env has CLAUDE_PROJECT_DIR and NODE_PATH', () => {
+test('.mcp.json: heroku-ops runs node scripts/launch-official.js; heroku-ops-gaps env has CLAUDE_PROJECT_DIR and NODE_PATH', () => {
   const s = readJson('.mcp.json').mcpServers;
   assert.equal(s['heroku-ops'].command, 'node');
-  assert.deepEqual(s['heroku-ops'].args, ['${CLAUDE_PLUGIN_ROOT}/bin/launch-official.js']);
+  assert.deepEqual(s['heroku-ops'].args, ['${CLAUDE_PLUGIN_ROOT}/scripts/launch-official.js']);
   const g = s['heroku-ops-gaps'];
   assert.equal(g.command, 'node');
   assert.deepEqual(g.args, ['${CLAUDE_PLUGIN_ROOT}/mcp-gaps/server.js']);
@@ -129,7 +129,7 @@ test('guard.js and launch-official.js start from a plugin root with spaces in th
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'plug in-'));
   try {
     const root = path.join(tmp, 'plug in');
-    for (const d of ['hooks', 'lib', 'bin', 'mcp-gaps']) {
+    for (const d of ['hooks', 'lib', 'scripts', 'mcp-gaps']) {
       fs.cpSync(path.join(ROOT, d), path.join(root, d), {
         recursive: true,
         filter: (src) => path.basename(src) !== 'test',
@@ -160,7 +160,7 @@ test('guard.js and launch-official.js start from a plugin root with spaces in th
 
     const fake = path.join(tmp, 'nosession.js');
     fs.writeFileSync(fake, 'process.exit(1);');
-    const l = spawnSync(process.execPath, [path.join(root, 'bin', 'launch-official.js')], {
+    const l = spawnSync(process.execPath, [path.join(root, 'scripts', 'launch-official.js')], {
       env: { ...env, HEROKU_OPS_TEST_HEROKU: fake },
       encoding: 'utf8',
     });

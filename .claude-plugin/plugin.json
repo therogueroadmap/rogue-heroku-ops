@@ -1,7 +1,8 @@
 {
   "name": "rogue-heroku-ops",
   "description": "Heroku operations agent with a safety guard: deploy GO/NO-GO, incident triage and routine checks; never deploys.",
-  "version": "0.2.0",
+  "version": "0.2.1",
+  "icon": "./.claude-plugin/icon.png",
   "author": {
     "name": "José R. Pérez Sandó",
     "email": "contact@therogueroadmap.com"

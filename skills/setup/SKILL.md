@@ -19,7 +19,7 @@ Run in the main session. Use Bash (or PowerShell on Windows) only for the read-o
 
 Use this mode only when the request is just to change the deploy branch of an app (for example "change the deploy branch of `<app>` to `release/2026-12`") or the argument is `branch`. Otherwise skip to step 1.
 
-1. Read `<projectDir>/.claude/rogue-heroku-ops.json`. It must exist and be valid (`node "${CLAUDE_PLUGIN_ROOT}/bin/validate-config.js" "<projectDir>"` prints `OK`). If it is missing or invalid, drop quick mode and run the full setup from step 1.
+1. Read `<projectDir>/.claude/rogue-heroku-ops.json`. It must exist and be valid (`node "${CLAUDE_PLUGIN_ROOT}/scripts/validate-config.js" "<projectDir>"` prints `OK`). If it is missing or invalid, drop quick mode and run the full setup from step 1.
 2. Pick the app (ask if there are several and the request does not name one) and the new branch.
 3. Check that the branch exists on the remote, read-only.
    - First validate `<branch>` against the `deployBranch` grammar: segments separated by `/`, each segment `[A-Za-z0-9_][A-Za-z0-9_-]*` with internal dots allowed; no spaces, `;`, `$`, quotes or `..`. If it does not match, stop without running git and tell the person.
@@ -28,7 +28,7 @@ Use this mode only when the request is just to change the deploy branch of an ap
    - If the exit code is not 0, report "could not verify the branch" with the error and stop; write nothing.
    - The branch exists only if some output line ends exactly with `<TAB>refs/heads/<branch>`. Otherwise stop and tell the person; change nothing.
 4. Show the change as before -> after (`deployBranch`: `<old>` -> `<new>`) and ask for confirmation before writing.
-5. Write only `deployBranch` of that app (Write tool, the rest of the file untouched), then validate again with `node "${CLAUDE_PLUGIN_ROOT}/bin/validate-config.js" "<projectDir>"`. Stop there: no other step runs in quick mode.
+5. Write only `deployBranch` of that app (Write tool, the rest of the file untouched), then validate again with `node "${CLAUDE_PLUGIN_ROOT}/scripts/validate-config.js" "<projectDir>"`. Stop there: no other step runs in quick mode.
 
 ### 1. Check the tools
 
@@ -41,7 +41,7 @@ Run each one separately and report present / missing with its version:
 | git | `git --version` | https://git-scm.com/downloads |
 | psql | `psql --version` | https://www.postgresql.org/download/ |
 
-On Windows, if `psql --version` fails, run `node -e "console.log(require(process.argv[1]).findPsqlDir() || 'none')" "${CLAUDE_PLUGIN_ROOT}/bin/launch-official.js"` (works the same in PowerShell and Git Bash). It prints the `bin` folder of the highest PostgreSQL version installed under `%ProgramFiles%\PostgreSQL`, the one the plugin uses, or `none`. If it prints a folder, report "found at <folder>, not on PATH; the plugin uses it automatically" instead of "missing".
+On Windows, if `psql --version` fails, run `node -e "console.log(require(process.argv[1]).findPsqlDir() || 'none')" "${CLAUDE_PLUGIN_ROOT}/scripts/launch-official.js"` (works the same in PowerShell and Git Bash). It prints the `bin` folder of the highest PostgreSQL version installed under `%ProgramFiles%\PostgreSQL`, the one the plugin uses, or `none`. If it prints a folder, report "found at <folder>, not on PATH; the plugin uses it automatically" instead of "missing".
 
 Node older than 20 counts as missing. A missing tool does not abort the run, except the Heroku CLI and Node: without the Heroku CLI, stop after reporting (steps 2 and 3 need it); without Node (or with Node older than 20), stop after reporting too (the config validator in step 5, the hooks and the plugin servers need it). Say what each missing tool disables: `git` (release and deploy-branch checks), `psql` (database queries and migrations).
 
@@ -120,7 +120,7 @@ The git tools and the migration checks of the deploy go/no-go work on the reposi
 }
 ```
 
-3. Validate: `node "${CLAUDE_PLUGIN_ROOT}/bin/validate-config.js" "<projectDir>"`.
+3. Validate: `node "${CLAUDE_PLUGIN_ROOT}/scripts/validate-config.js" "<projectDir>"`.
    - `OK <file>` (exit 0): continue.
    - `INVALID <file>` plus one problem per line (exit 1): show the problems, fix the file with the person, and validate again. Do not continue while it is invalid.
 4. Tell the person the file holds no secrets and that committing it or not is their choice.

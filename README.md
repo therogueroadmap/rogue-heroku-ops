@@ -2,7 +2,7 @@
 
 A Claude Code plugin that gives you a Heroku operator agent behind a safety guard: deploy GO/NO-GO checks, incident triage and routine reviews of your apps. It never deploys, rolls back or restores.
 
-**Version:** 0.2.0 | **Status:** In progress | **Live-tested:** Windows (see [Tested platforms](#tested-platforms))
+**Version:** 0.2.1 | **Status:** In progress | **Live-tested:** Windows (see [Tested platforms](#tested-platforms))
 
 ## What it does
 
@@ -77,7 +77,7 @@ The config file is exactly `${CLAUDE_PROJECT_DIR}/.claude/rogue-heroku-ops.json`
 - `repoPath` is optional: the absolute path of the root of the app's git repository (it must contain `.git`). Without it, the app uses the project directory if that is the root of a repository; otherwise it has no repository and the git tools return an error for it. Several apps can share a `repoPath`.
 - `migrations` is optional and belongs to each app (`repoDir` is relative to that app's repository); without it the agent reports migrations as "not configured".
 - `n1Mode` is `ask` (default: state-changing actions ask for confirmation) or `deny` (they are denied and the command is shown to you).
-- Unknown keys make the config invalid. Validate it with `/rogue-heroku-ops:setup`, or from a clone of this repository with `node bin/validate-config.js <projectDir>` (the path is relative to the clone).
+- Unknown keys make the config invalid. Validate it with `/rogue-heroku-ops:setup`, or from a clone of this repository with `node scripts/validate-config.js <projectDir>` (the path is relative to the clone).
 
 Breaking change in 0.2.0: `migrations` moved from the root of the config into each app, and a root-level `migrations` makes the config invalid. Run `/rogue-heroku-ops:setup` to migrate a 0.1.x config. The git tools (`git_fetch`, `git_branches`, `git_log`, `git_show`, `git_ls_tree`, `git_diff`) now require `app`; the agent and the procedures already pass it.
 

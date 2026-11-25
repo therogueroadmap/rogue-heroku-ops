@@ -4,6 +4,16 @@ All notable changes to this project are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-11-25
+
+### Fixed
+
+- The plugin can be synced to claude.ai. The marketplace sync skipped it because claude.ai-hosted plugins may not ship a top-level `bin/` directory. The launcher, the dependency installer and the config validator moved from `bin/` to `scripts/`; `.mcp.json`, the SessionStart hook and the setup skill point to the new paths.
+
+### Added
+
+- `plugin.json` declares the plugin icon (`icon`), so listings that read the field show it.
+
 ## [0.2.0] - 2026-11-24
 
 ### Security
